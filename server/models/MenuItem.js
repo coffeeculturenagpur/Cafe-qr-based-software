@@ -1,10 +1,15 @@
 const mongoose = require('mongoose');
 
 const menuItemSchema = new mongoose.Schema({
+    cafeId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Cafe',
+        required: true,
+        index: true,
+    },
     name: {
         type: String,
-        required: true, // corrected typo from 'reqiured' to 'require
-        required: true, // <-- fix typo her
+        required: true,
         trim: true,
     },
     description: {
@@ -19,7 +24,11 @@ const menuItemSchema = new mongoose.Schema({
     category: {
         type: String,
         required: true,
-        enum: ['Starters', 'Main Course', 'Drinks', 'Desserts'],
+    },
+    type: {
+        type: String,
+        enum: ['veg', 'non-veg'],
+        default: 'veg',
     },
     isAvailable: {
         type: Boolean,

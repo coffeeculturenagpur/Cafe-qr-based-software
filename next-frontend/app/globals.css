@@ -1,0 +1,20 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-primary: 249 115 22; /* orange-500 */
+  --brand-accent: 251 191 36;  /* amber-400 */
+}
+
+html, body {
+  height: 100%;
+}
+
+.bg-brand {
+  background-color: rgb(var(--brand-primary));
+}
+
+.text-brand {
+  color: rgb(var(--brand-primary));
+}

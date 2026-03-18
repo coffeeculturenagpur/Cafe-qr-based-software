@@ -1,12 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useSpring, animated } from '@react-spring/web';
+import { motion } from 'framer-motion';
+import { useSpring } from '@react-spring/web';
 import toast, { Toaster } from 'react-hot-toast';
-import { Search, RefreshCw, Clock, TrendingUp, Award, Zap, ChevronDown } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import WaiterSidebar from './WaiterSidebar.jsx';
+import { Clock, TrendingUp, Award, Zap } from 'lucide-react';
 import WaiterOrdersList from './WaiterOrdersList';
-import WaiterProfile from './WaiterProfile.jsx';
 
 // PWA Manifest and Service Worker Registration
 if ('serviceWorker' in navigator) {
@@ -123,7 +120,7 @@ export default function WaiterDashboard() {
   const [notifications, setNotifications] = useState([]);
   const [search, setSearch] = useState('');
   const [assigned, setAssigned] = useState([]);
-  const [view, setView] = useState('orders');
+  const [view] = useState('orders');
   const [history, setHistory] = useState(getInitialHistory());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -133,18 +130,11 @@ export default function WaiterDashboard() {
     completedToday: 0,
     avgDeliveryTime: 0,
   });
-  const [theme, setTheme] = useState(getInitialTheme());
+  const [theme] = useState(getInitialTheme());
   const [sortBy, setSortBy] = useState('priority');
   const [filterBy, setFilterBy] = useState('all');
-  const [showInsights, setShowInsights] = useState(false);
   const refreshIntervalRef = useRef(null);
   const audioRef = useRef(null);
-
-  const headerSpring = useSpring({
-    from: { opacity: 0, transform: 'translateY(-20px)' },
-    to: { opacity: 1, transform: 'translateY(0px)' },
-    config: { tension: 280, friction: 60 },
-  });
 
   const statsSpring = useSpring({
     from: { scale: 0.8, opacity: 0 },
@@ -335,22 +325,6 @@ export default function WaiterDashboard() {
   const filtered = filterOrders(sortOrders(orders)).filter(o =>
     o.id.toString().includes(search) || o.table.toString().includes(search)
   );
-
-  // Mini Graphs Data
-  const deliveryTimeData = history
-    .filter(order => {
-      const today = new Date().toDateString();
-      return new Date(order.servedAt).toDateString() === today;
-    })
-    .map(order => ({
-      time: new Date(order.servedAt).getHours(),
-      deliveryTime: order.deliveryTime,
-    }));
-
-  const ordersPerHourData = Array.from({ length: 24 }, (_, i) => ({
-    hour: i,
-    orders: history.filter(order => new Date(order.servedAt).getHours() === i).length,
-  }));
 
   function StatsBar() {
     return (

@@ -1,0 +1,9 @@
+﻿{
+  "name": "QRDine",
+  "short_name": "QRDine",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff7ed",
+  "theme_color": "#f97316",
+  "icons": []
+}

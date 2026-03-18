@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom'; // ✅ added import
-import { FaUtensils, FaUserCircle, FaSignOutAlt, FaClock } from 'react-icons/fa';
+import { FaUtensils, FaUserCircle, FaClock } from 'react-icons/fa';
 
 const Sidebar = ({ active, onNavigate, chefName }) => {
   const navigate = useNavigate(); // ✅ added navigate hook

@@ -83,6 +83,7 @@ const CustomerMenuPage = () => {
               cart={cart}
               setCart={setCart}
               onProceedToCheckout={handleProceedToCheckout}
+              requireOtp={true}
             />
           </div>
         </>

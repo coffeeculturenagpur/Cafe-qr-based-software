@@ -13,7 +13,9 @@ const getCart = () => {
         quantity: item.qty || item.quantity || 1
       }));
     }
-  } catch {}
+  } catch (error) {
+    return [];
+  }
   return [];
 };
 

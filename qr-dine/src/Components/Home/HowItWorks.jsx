@@ -19,7 +19,7 @@ const steps = [
   {
     icon: "🍽️",
     title: "Enjoy Your Meal",
-    desc: "Relax and enjoy your meal, we'll take care of the rest.",
+    desc: "Relax and enjoy your meal, we&apos;ll take care of the rest.",
   },
 ];
 

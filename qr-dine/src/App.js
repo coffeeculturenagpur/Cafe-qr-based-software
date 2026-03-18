@@ -13,6 +13,10 @@ import HomePage from './Components/Home/HomePage.jsx';
 import Menu from './Components/Menu/Menu.jsx';
 
 import Login from './Pages/Login.jsx';
+import About from './Pages/About.jsx';
+import Contact from './Pages/Contact.jsx';
+import CafeEntry from './Pages/CafeEntry.jsx';
+import SuperAdmin from './Pages/SuperAdmin.jsx';
 import AdminLogin from './Components/Admin/AdminLogin.jsx';
 
 function App() {
@@ -20,7 +24,11 @@ function App() {
     <div className="App">
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/home" element={<HomePage />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/contact" element={<Contact />} />
         <Route path="/menu" element={<Menu />} />
+        <Route path="/:cafeId/menu" element={<Menu />} />
         <Route path="/confirm" element={<ConfirmPage />} />
         <Route path="/thank-you" element={<ThankYouPage />} />
         <Route path="/chef" element={<ChefDashboard />} />
@@ -30,6 +38,8 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/admin-login" element={<AdminLogin />} />
         <Route path="/register-staff" element={<AdminRegisterForm />} />
+        <Route path="/super-admin" element={<SuperAdmin />} />
+        <Route path="/:cafeId" element={<CafeEntry />} />
       </Routes>
     </div>
   );

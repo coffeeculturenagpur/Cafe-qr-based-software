@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import PropTypes from 'prop-types';
@@ -9,7 +9,45 @@ import NonVegImg from '../../assets/Veg and Non Veg/Non Veg.jpg';
 import CartPage from '../Cart/CartPage.jsx';
 
 // Use environment variable for API URL
-const API_URL = process.env.REACT_APP_API_URL
+const API_URL = process.env.REACT_APP_API_URL;
+const API_BASE_URL =
+  process.env.REACT_APP_SERVER_URL || process.env.REACT_APP_API_BASE_URL || "";
+
+const isVeg = (item) => {
+  if (typeof item.isVeg === 'boolean') return item.isVeg;
+  if (typeof item.veg === 'boolean') return item.veg;
+  if (typeof item.type === 'string') return item.type.toLowerCase() === 'veg';
+
+  const name = item.name?.toLowerCase() || '';
+  const desc = item.description?.toLowerCase() || '';
+  const text = `${name} ${desc}`;
+
+  if (
+    text.includes('chicken') ||
+    text.includes('fish') ||
+    text.includes('mutton') ||
+    text.includes('egg') ||
+    text.includes('prawn') ||
+    text.includes('butter chicken')
+  ) {
+    return false;
+  }
+
+  if (
+    text.includes('veg') ||
+    text.includes('paneer') ||
+    text.includes('dal') ||
+    text.includes('chole') ||
+    text.includes('palak') ||
+    text.includes('spring roll')
+  ) {
+    return true;
+  }
+
+  return true;
+};
+
+const isNonVeg = (item) => !isVeg(item);
 // Debounce utility for search input
 const debounce = (func, delay) => {
   let timeoutId;
@@ -50,7 +88,7 @@ const Menu = () => {
   const [showCart, setShowCart] = useState(false);
   const sectionRefs = useRef({});
   const location = useLocation();
-  const navigate = useNavigate();
+  const { cafeId: cafeIdFromRoute } = useParams();
 
   // Extract table number from URL
   const tableNumber = useMemo(() => {
@@ -93,7 +131,7 @@ const Menu = () => {
         }
         setLocationReady(true);
       },
-      (err) => {
+      () => {
         setUserCity('Unknown');
         setLocationReady(true);
         setLocationError('Location permission denied. Please allow location access to use this service.');
@@ -107,7 +145,15 @@ const Menu = () => {
     const fetchMenu = async () => {
       try {
         setLoading(true);
-        const res = await fetch(API_URL);
+        const cafeId = cafeIdFromRoute || process.env.REACT_APP_DEFAULT_CAFE_ID;
+        if (!cafeId && !API_URL) {
+          setMenuData([]);
+          setError("Missing cafeId. Open the menu using /<cafeId>/menu?table=1");
+          return;
+        }
+
+        const url = API_URL || `${API_BASE_URL}/api/menu/${cafeId}`;
+        const res = await fetch(url);
         if (!res.ok) throw new Error('Failed to fetch menu');
         const data = await res.json();
 
@@ -137,7 +183,7 @@ const Menu = () => {
     };
 
     fetchMenu();
-  }, [locationReady]);
+  }, [locationReady, cafeIdFromRoute]);
 
   // Handle scroll for category highlighting and progress bar
   useEffect(() => {
@@ -169,22 +215,6 @@ const Menu = () => {
 
   // Debounced search handler
   const debouncedSearch = debounce((value) => setSearchTerm(value), 300);
-
-  // Improved Veg/Non-Veg detection and filtering
-  const isVeg = (item) => {
-    // Check for explicit boolean or string values
-    if (typeof item.isVeg === 'boolean') return item.isVeg;
-    if (typeof item.veg === 'boolean') return item.veg;
-    if (typeof item.type === 'string') return item.type.toLowerCase() === 'veg';
-    // Fallback: check name/description for veg/non-veg hints
-    const name = item.name?.toLowerCase() || '';
-    const desc = item.description?.toLowerCase() || '';
-    if (name.includes('chicken') || name.includes('fish') || name.includes('mutton') || name.includes('egg') || name.includes('prawn') || name.includes('butter chicken')) return false;
-    if (name.includes('veg') || name.includes('paneer') || name.includes('dal') || name.includes('chole') || name.includes('palak') || name.includes('spring roll') || name.includes('kabab') || name.includes('biryani')) return true;
-    // Default to veg if not sure
-    return true;
-  };
-  const isNonVeg = (item) => !isVeg(item);
 
   // Filter menu data
   const filteredMenuData = useMemo(() => {
@@ -513,15 +543,16 @@ const Menu = () => {
             style={{ zIndex: 102, pointerEvents: showCart ? 'auto' : 'none' }}
           >
             <button onClick={() => setShowCart(false)} className="cart-slide-close-btn">❌</button>
-            <CartPage
-              cart={cart}
-              setCart={setCart}
-              onProceedToCheckout={handleProceedToCheckout}
-              tableNumber={tableNumber}
-            />
-          </div>
-        </>
-      )}
+             <CartPage
+               cart={cart}
+               setCart={setCart}
+               onProceedToCheckout={handleProceedToCheckout}
+               tableNumber={tableNumber}
+               requireOtp={true}
+             />
+           </div>
+         </>
+       )}
 
       {/* Footer */}
       <footer className="mt-8 sm:mt-12 mb-2 sm:mb-4 flex flex-col sm:flex-row justify-between items-center px-2 sm:px-8 text-gray-500 text-xs sm:text-sm gap-2 sm:gap-0 w-full">
