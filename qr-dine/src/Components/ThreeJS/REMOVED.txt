@@ -1,1 +1,0 @@
-ThreeBackground.jsx and all Three.js usage have been removed as per request.

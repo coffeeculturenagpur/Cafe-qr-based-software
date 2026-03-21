@@ -99,8 +99,11 @@ export default function KitchenPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-amber-50 px-6 py-10">
-      <div className="mx-auto max-w-6xl space-y-8">
+    <main className="min-h-screen page-shell relative overflow-hidden px-6 py-10">
+      <div className="pointer-events-none absolute inset-0 bg-grid opacity-30" />
+      <div className="pointer-events-none absolute -top-24 -right-20 h-64 w-64 rounded-full bg-orange-300/30 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 -left-24 h-72 w-72 rounded-full bg-emerald-300/20 blur-3xl" />
+      <div className="relative mx-auto max-w-6xl space-y-8">
         <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-orange-700 shadow">

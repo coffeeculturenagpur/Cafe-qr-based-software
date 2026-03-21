@@ -31,11 +31,12 @@ export default function AdminMenuPage() {
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("Drinks");
   const [type, setType] = useState("veg");
+  const [isSpecial, setIsSpecial] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
   const [imageUploading, setImageUploading] = useState(false);
 
   const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({ name: "", description: "", price: "", category: "", type: "veg", image: "" });
+  const [editForm, setEditForm] = useState({ name: "", description: "", price: "", category: "", type: "veg", image: "", isSpecial: false });
 
   const listUrl = useMemo(() => {
     const qs = adminCafeId ? `?cafeId=${encodeURIComponent(adminCafeId)}` : "";
@@ -58,6 +59,10 @@ export default function AdminMenuPage() {
   const [tablesLoading, setTablesLoading] = useState(false);
   const [tableError, setTableError] = useState("");
   const [tableCount, setTableCount] = useState("");
+  const [manualTableNumber, setManualTableNumber] = useState("");
+  const [manualTableLoading, setManualTableLoading] = useState(false);
+  const [manualTableError, setManualTableError] = useState("");
+  const [manualTableSuccess, setManualTableSuccess] = useState("");
 
   const [staffUsername, setStaffUsername] = useState("");
   const [staffEmail, setStaffEmail] = useState("");
@@ -72,7 +77,15 @@ export default function AdminMenuPage() {
   const [staffListError, setStaffListError] = useState("");
 
   const [cafeInfo, setCafeInfo] = useState(null);
-  const [cafeForm, setCafeForm] = useState({ name: "", address: "", logoUrl: "", brandImageUrl: "" });
+  const [cafeForm, setCafeForm] = useState({
+    name: "",
+    address: "",
+    logoUrl: "",
+    brandImageUrl: "",
+    taxPercent: "",
+    discountType: "percent",
+    discountValue: "",
+  });
   const [cafeLoading, setCafeLoading] = useState(false);
   const [cafeError, setCafeError] = useState("");
   const [cafeSuccess, setCafeSuccess] = useState("");
@@ -164,6 +177,59 @@ export default function AdminMenuPage() {
     }
   };
 
+  const addTableManual = async (event) => {
+    event.preventDefault();
+    if (!requireLogin(false)) return;
+    if (!tablesCafeId && role === "super_admin") {
+      setManualTableError("cafeId is required");
+      return;
+    }
+    const number = Number(manualTableNumber);
+    if (!number || number < 1) {
+      setManualTableError("Table number must be >= 1");
+      return;
+    }
+    setManualTableLoading(true);
+    setManualTableError("");
+    setManualTableSuccess("");
+    try {
+      const body = { tableNumber: number };
+      if (role === "super_admin") body.cafeId = tablesCafeId;
+      await apiFetch("/api/admin/tables", {
+        method: "POST",
+        headers: { ...authHeaders() },
+        body: JSON.stringify(body),
+      });
+      setManualTableNumber("");
+      setManualTableSuccess(`Added table ${number}`);
+      loadTables();
+    } catch (e) {
+      setManualTableError(e.message || "Failed to add table");
+    } finally {
+      setManualTableLoading(false);
+    }
+  };
+
+  const deleteTable = async (tableId, tableNumber) => {
+    if (!requireLogin(false)) return;
+    const ok = window.confirm(`Delete table ${tableNumber}? This removes its QR.`);
+    if (!ok) return;
+    setTablesLoading(true);
+    setTableError("");
+    try {
+      const qs = role === "super_admin" ? `?cafeId=${encodeURIComponent(tablesCafeId)}` : "";
+      await apiFetch(`/api/admin/tables/${tableId}${qs}`, {
+        method: "DELETE",
+        headers: { ...authHeaders() },
+      });
+      setTables((prev) => prev.filter((t) => t._id !== tableId));
+    } catch (e) {
+      setTableError(e.message || "Failed to delete table");
+    } finally {
+      setTablesLoading(false);
+    }
+  };
+
   const uploadCafeImage = async (file, setter, setUploading) => {
     if (!file) return;
     if (!requireLogin(false)) return;
@@ -208,6 +274,14 @@ export default function AdminMenuPage() {
         address: data?.address || "",
         logoUrl: data?.logoUrl || "",
         brandImageUrl: data?.brandImageUrl || "",
+        taxPercent: typeof data?.taxPercent === "number" ? String(data.taxPercent) : "",
+        discountType: data?.discountType || "percent",
+        discountValue:
+          typeof data?.discountValue === "number"
+            ? String(data.discountValue)
+            : typeof data?.discountPercent === "number"
+              ? String(data.discountPercent)
+              : "",
       });
     } catch (e) {
       setCafeError(e.message || "Failed to load cafe");
@@ -246,6 +320,9 @@ export default function AdminMenuPage() {
         address: cafeForm.address,
         logoUrl: cafeForm.logoUrl,
         brandImageUrl: cafeForm.brandImageUrl,
+        taxPercent: cafeForm.taxPercent === "" ? 0 : Number(cafeForm.taxPercent),
+        discountType: cafeForm.discountType || "percent",
+        discountValue: cafeForm.discountValue === "" ? 0 : Number(cafeForm.discountValue),
       };
       if (role === "super_admin") body.cafeId = cafeIdForAdmin;
       const updated = await apiFetch("/api/admin/cafe", {
@@ -451,6 +528,7 @@ export default function AdminMenuPage() {
         type,
         image: imageUrl || "",
         isAvailable: true,
+        isSpecial,
       };
       if (role === "super_admin" && adminCafeId) body.cafeId = adminCafeId;
 
@@ -465,6 +543,7 @@ export default function AdminMenuPage() {
       setCategory("Drinks");
       setType("veg");
       setImageUrl("");
+      setIsSpecial(false);
       setItems((prev) => upsertById(prev, data));
     } catch (e2) {
       setError(e2.message || "Failed to create item");
@@ -482,6 +561,7 @@ export default function AdminMenuPage() {
       category: item.category || "",
       type: item.type || "veg",
       image: item.image || "",
+      isSpecial: Boolean(item.isSpecial),
     });
   };
 
@@ -503,6 +583,7 @@ export default function AdminMenuPage() {
         category: editForm.category,
         type: editForm.type,
         image: editForm.image || "",
+        isSpecial: editForm.isSpecial,
       };
       if (role === "super_admin" && adminCafeId) body.cafeId = adminCafeId;
 
@@ -557,8 +638,11 @@ export default function AdminMenuPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-amber-50 px-6 py-10">
-      <div className="mx-auto max-w-6xl space-y-8">
+    <main className="min-h-screen page-shell relative overflow-hidden px-6 py-10">
+      <div className="pointer-events-none absolute inset-0 bg-grid opacity-30" />
+      <div className="pointer-events-none absolute -top-24 -right-20 h-64 w-64 rounded-full bg-orange-300/30 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 -left-24 h-72 w-72 rounded-full bg-emerald-300/20 blur-3xl" />
+      <div className="relative mx-auto max-w-6xl space-y-8">
         <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-orange-700 shadow">
@@ -664,6 +748,30 @@ export default function AdminMenuPage() {
                   />
                   {cafeBrandUploading && <div className="text-xs text-slate-500">Uploading brand image...</div>}
                 </div>
+                <Input
+                  value={cafeForm.taxPercent}
+                  onChange={(e) => setCafeForm((p) => ({ ...p, taxPercent: e.target.value }))}
+                  placeholder="Tax % (e.g. 5)"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                />
+                <select
+                  value={cafeForm.discountType}
+                  onChange={(e) => setCafeForm((p) => ({ ...p, discountType: e.target.value }))}
+                  className="w-full rounded-2xl border border-slate-200 bg-white/80 px-3 py-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-300/60"
+                >
+                  <option value="percent">Discount in %</option>
+                  <option value="fixed">Discount in INR</option>
+                </select>
+                <Input
+                  value={cafeForm.discountValue}
+                  onChange={(e) => setCafeForm((p) => ({ ...p, discountValue: e.target.value }))}
+                  placeholder={cafeForm.discountType === "fixed" ? "Discount amount (e.g. 50)" : "Discount % (e.g. 10)"}
+                  type="number"
+                  min={0}
+                  step="0.01"
+                />
                 <div className="md:col-span-2">
                   <Button className="w-full" type="submit" disabled={cafeLoading}>
                     {cafeLoading ? "Saving..." : "Save branding"}
@@ -769,6 +877,21 @@ export default function AdminMenuPage() {
 
             {tableError && <div className="mt-3 text-red-700 font-semibold">{tableError}</div>}
 
+            <form className="mt-4 flex flex-wrap items-center gap-3" onSubmit={addTableManual}>
+              <Input
+                value={manualTableNumber}
+                onChange={(e) => setManualTableNumber(e.target.value)}
+                placeholder="Add single table number"
+                type="number"
+                min={1}
+              />
+              <Button variant="outline" type="submit" disabled={manualTableLoading}>
+                {manualTableLoading ? "Adding..." : "Add table"}
+              </Button>
+              {manualTableError && <div className="text-red-700 font-semibold">{manualTableError}</div>}
+              {manualTableSuccess && <div className="text-emerald-700 font-semibold">{manualTableSuccess}</div>}
+            </form>
+
             {tablesCafeId ? (
               <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {tables.map((table) => {
@@ -795,6 +918,15 @@ export default function AdminMenuPage() {
                         <img src={qrUrl} alt={`QR for table ${table.tableNumber}`} className="h-40 w-40 rounded-xl border border-orange-100" />
                       </div>
                       <div className="mt-3 text-xs text-gray-500 break-all">{tableUrl}</div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => deleteTable(table._id, table.tableNumber)}
+                          disabled={tablesLoading}
+                        >
+                          Delete seat
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
@@ -924,6 +1056,10 @@ export default function AdminMenuPage() {
                   <option value="non-veg">Non-veg</option>
                   <option value="customer-insights">Customer Insights</option>
                 </select>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={isSpecial} onChange={(e) => setIsSpecial(e.target.checked)} />
+                  Mark as Today&apos;s Special
+                </label>
                 <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description" rows={3} />
                 <div className="space-y-2">
                   <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="Image URL (optional)" />
@@ -953,6 +1089,11 @@ export default function AdminMenuPage() {
                       <div>
                         <div className="font-extrabold text-lg text-slate-900">{it.name}</div>
                         <div className="text-sm text-slate-600">{it.category} - {it.type}</div>
+                        {it.isSpecial && (
+                          <div className="mt-1 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                            Today&apos;s Special
+                          </div>
+                        )}
                       </div>
                       <div className={`px-3 py-1 rounded-full text-xs font-semibold border ${it.isAvailable ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-100 text-gray-700 border-gray-200"}`}>
                         {it.isAvailable ? "Available" : "Unavailable"}
@@ -973,6 +1114,14 @@ export default function AdminMenuPage() {
                           <option value="non-veg">Non-veg</option>
                           <option value="customer-insights">Customer Insights</option>
                         </select>
+                        <label className="flex items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={editForm.isSpecial}
+                            onChange={(e) => setEditForm((p) => ({ ...p, isSpecial: e.target.checked }))}
+                          />
+                          Today&apos;s Special
+                        </label>
                         <Input value={editForm.image} onChange={(e) => setEditForm((p) => ({ ...p, image: e.target.value }))} placeholder="Image URL" />
                         <Textarea value={editForm.description} onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))} placeholder="Description" rows={3} />
                         <div className="flex gap-2">

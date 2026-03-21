@@ -1,9 +1,10 @@
 {
   "/admin/menu/page": "app/admin/menu/page.js",
   "/[cafeId]/order/[orderId]/page": "app/[cafeId]/order/[orderId]/page.js",
-  "/admin/login/page": "app/admin/login/page.js",
-  "/chef/login/page": "app/chef/login/page.js",
-  "/waiter/login/page": "app/waiter/login/page.js",
+  "/login/page": "app/login/page.js",
+  "/kitchen/page": "app/kitchen/page.js",
+  "/page": "app/page.js",
   "/[cafeId]/page": "app/[cafeId]/page.js",
-  "/[cafeId]/menu/page": "app/[cafeId]/menu/page.js"
+  "/waiter/page": "app/waiter/page.js",
+  "/chef/login/page": "app/chef/login/page.js"
 }

@@ -17,7 +17,12 @@ html, body {
 
 body {
   font-family: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: rgb(var(--brand-dark));
   background-color: rgb(var(--brand-light));
+  background-image:
+    radial-gradient(circle at top left, rgba(251, 191, 36, 0.18), transparent 45%),
+    radial-gradient(circle at top right, rgba(16, 185, 129, 0.16), transparent 45%),
+    radial-gradient(circle at bottom left, rgba(14, 116, 144, 0.12), transparent 50%);
 }
 
 .text-brand {
@@ -48,6 +53,13 @@ body {
     radial-gradient(rgba(15, 23, 42, 0.06) 1px, transparent 1px);
   background-size: 26px 26px, 12px 12px;
   background-position: 0 0, 6px 6px;
+}
+
+.page-shell {
+  background-image:
+    radial-gradient(circle at 10% 10%, rgba(251, 146, 60, 0.22), transparent 42%),
+    radial-gradient(circle at 90% 15%, rgba(56, 189, 248, 0.18), transparent 40%),
+    radial-gradient(circle at 30% 80%, rgba(16, 185, 129, 0.16), transparent 48%);
 }
 
 @keyframes floaty {
