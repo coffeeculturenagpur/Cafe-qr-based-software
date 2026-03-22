@@ -162,3 +162,14 @@ body {
     0 0 0 1px rgba(120, 53, 15, 0.12),
     0 28px 56px -16px rgba(28, 25, 23, 0.45);
 }
+.coffee-culture-motif {
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(120, 53, 15, 0.08) 0 24px, transparent 26px),
+    radial-gradient(circle at 22% 22%, rgba(120, 53, 15, 0.06) 0 44px, transparent 46px),
+    radial-gradient(circle at 80% 30%, rgba(120, 53, 15, 0.08) 0 22px, transparent 24px),
+    radial-gradient(circle at 78% 32%, rgba(120, 53, 15, 0.05) 0 42px, transparent 44px),
+    radial-gradient(circle at 30% 78%, rgba(120, 53, 15, 0.08) 0 20px, transparent 22px),
+    radial-gradient(circle at 32% 76%, rgba(120, 53, 15, 0.05) 0 38px, transparent 40px);
+  mix-blend-mode: multiply;
+}
+

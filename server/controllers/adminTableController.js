@@ -82,18 +82,27 @@ exports.generateTables = async (req, res) => {
       await cafe.save();
     }
 
-    const existing = await Table.find({ cafeId }).select("tableNumber").lean();
-    const existingNumbers = new Set(existing.map((t) => t.tableNumber));
+    const existing = await Table.find({ cafeId }).select("tableNumber isActive").lean();
+    const existingMap = new Map(existing.map((t) => [t.tableNumber, Boolean(t.isActive)]));
 
     const toCreate = [];
+    const toReactivate = [];
     for (let i = 1; i <= requestedCount; i += 1) {
-      if (!existingNumbers.has(i)) {
+      if (!existingMap.has(i)) {
         toCreate.push({ cafeId: new mongoose.Types.ObjectId(cafeId), tableNumber: i });
+      } else if (!existingMap.get(i)) {
+        toReactivate.push(i);
       }
     }
 
     if (toCreate.length > 0) {
       await Table.insertMany(toCreate);
+    }
+    if (toReactivate.length > 0) {
+      await Table.updateMany(
+        { cafeId, tableNumber: { $in: toReactivate } },
+        { $set: { isActive: true } }
+      );
     }
 
     const tables = await Table.find({ cafeId, isActive: true }).sort({ tableNumber: 1 }).lean();
@@ -112,10 +121,23 @@ exports.deleteTable = async (req, res) => {
     const table = await Table.findOne({ _id: id, cafeId });
     if (!table) return res.status(404).json({ message: "Table not found" });
 
-    table.isActive = false;
-    await table.save();
+    await Table.deleteOne({ _id: id, cafeId });
 
-    return res.json({ message: "Table removed" });
+    return res.json({ message: "Table deleted" });
+  } catch (error) {
+    return res.status(500).json({ message: "Server error", error });
+  }
+};
+
+exports.deleteAllTables = async (req, res) => {
+  try {
+    const cafeId = getCafeIdFromRequest(req);
+    if (!cafeId) return res.status(400).json({ message: "cafeId is required" });
+
+    await Table.deleteMany({ cafeId });
+    await Cafe.findByIdAndUpdate(cafeId, { numberOfTables: 0 });
+
+    return res.json({ message: "All tables deleted" });
   } catch (error) {
     return res.status(500).json({ message: "Server error", error });
   }

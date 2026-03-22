@@ -41,6 +41,14 @@ export default function AdminMenuPage() {
   const [isSpecial, setIsSpecial] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
   const [imageUploading, setImageUploading] = useState(false);
+  const [csvFile, setCsvFile] = useState(null);
+  const [csvUploading, setCsvUploading] = useState(false);
+  const [csvError, setCsvError] = useState("");
+  const [csvSuccess, setCsvSuccess] = useState("");
+  const [csvErrors, setCsvErrors] = useState([]);
+  const [csvPreview, setCsvPreview] = useState([]);
+  const [csvPreviewErrors, setCsvPreviewErrors] = useState([]);
+  const [csvPreviewLoading, setCsvPreviewLoading] = useState(false);
 
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: "", description: "", price: "", category: "", type: "veg", image: "", isSpecial: false });
@@ -130,6 +138,7 @@ export default function AdminMenuPage() {
   }, [items]);
 
   const [baseCustomerUrl, setBaseCustomerUrl] = useState("");
+  const [qrApiBaseUrl, setQrApiBaseUrl] = useState("");
 
   const [tables, setTables] = useState([]);
   const [tablesLoading, setTablesLoading] = useState(false);
@@ -311,6 +320,30 @@ export default function AdminMenuPage() {
     }
   };
 
+  const deleteAllTables = async () => {
+    if (!requireLogin(false)) return;
+    if (!tablesCafeId && role === "super_admin") {
+      setTableError("cafeId is required");
+      return;
+    }
+    const ok = window.confirm("Delete ALL table QRs? This removes every table seat.");
+    if (!ok) return;
+    setTablesLoading(true);
+    setTableError("");
+    try {
+      const qs = role === "super_admin" ? `?cafeId=${encodeURIComponent(tablesCafeId)}` : "";
+      await apiFetch(`/api/admin/tables${qs}`, {
+        method: "DELETE",
+        headers: { ...authHeaders() },
+      });
+      setTables([]);
+    } catch (e) {
+      setTableError(e.message || "Failed to delete tables");
+    } finally {
+      setTablesLoading(false);
+    }
+  };
+
   const uploadCafeImage = async (file, setter, setUploading) => {
     if (!file) return;
     if (!requireLogin(false)) return;
@@ -462,6 +495,147 @@ export default function AdminMenuPage() {
     }
   };
 
+  const uploadMenuCsv = async (event) => {
+    event.preventDefault();
+    if (!requireLogin(false)) return;
+    if (!csvFile) {
+      setCsvError("Please choose a CSV file");
+      return;
+    }
+    if (role === "super_admin" && !adminCafeId) {
+      setCsvError("cafeId is required for super admin");
+      return;
+    }
+    setCsvUploading(true);
+    setCsvError("");
+    setCsvSuccess("");
+    setCsvErrors([]);
+    try {
+      const baseUrl = getApiBaseUrl();
+      if (!baseUrl) throw new Error("Missing NEXT_PUBLIC_API_BASE_URL");
+      const formData = new FormData();
+      formData.append("file", csvFile);
+      if (role === "super_admin") formData.append("cafeId", adminCafeId);
+      const res = await fetch(`${baseUrl}/api/admin/menu/bulk-upload`, {
+        method: "POST",
+        headers: {
+          ...(authHeaders() || {}),
+        },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "CSV upload failed");
+      setCsvSuccess(`Uploaded ${data.created} created, ${data.updated} updated (of ${data.total})`);
+      if (Array.isArray(data.errors) && data.errors.length > 0) {
+        setCsvErrors(data.errors);
+      }
+      setCsvFile(null);
+      load();
+    } catch (e) {
+      setCsvError(e.message || "CSV upload failed");
+    } finally {
+      setCsvUploading(false);
+    }
+  };
+
+  const splitCsvLine = (line) => {
+    const out = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const ch = line[i];
+      if (ch === "\"") {
+        if (inQuotes && line[i + 1] === "\"") {
+          current += "\"";
+          i += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+      if (ch === "," && !inQuotes) {
+        out.push(current);
+        current = "";
+        continue;
+      }
+      current += ch;
+    }
+    out.push(current);
+    return out.map((v) => v.trim());
+  };
+
+  const handleCsvFileChange = async (file) => {
+    setCsvFile(file);
+    setCsvPreview([]);
+    setCsvPreviewErrors([]);
+    if (!file) return;
+    if (role === "super_admin" && !adminCafeId) {
+      setCsvPreviewErrors([{ row: 0, message: "cafeId is required for super admin" }]);
+      return;
+    }
+    setCsvPreviewLoading(true);
+    try {
+      const baseUrl = getApiBaseUrl();
+      if (!baseUrl) throw new Error("Missing NEXT_PUBLIC_API_BASE_URL");
+      const formData = new FormData();
+      formData.append("file", file);
+      if (role === "super_admin") formData.append("cafeId", adminCafeId);
+      const res = await fetch(`${baseUrl}/api/admin/menu/bulk-preview`, {
+        method: "POST",
+        headers: {
+          ...(authHeaders() || {}),
+        },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Preview failed");
+      setCsvPreview(Array.isArray(data.preview) ? data.preview : []);
+      setCsvPreviewErrors(Array.isArray(data.errors) ? data.errors : []);
+    } catch (e) {
+      setCsvPreviewErrors([{ row: 0, message: e.message || "Preview failed" }]);
+    } finally {
+      setCsvPreviewLoading(false);
+    }
+  };
+
+  const deleteAllMenuItems = async () => {
+    if (!requireLogin(false)) return;
+    if (role === "super_admin" && !adminCafeId) {
+      setError("cafeId is required for super admin");
+      return;
+    }
+    const ok = window.confirm("Delete ALL menu items? This cannot be undone.");
+    if (!ok) return;
+    setLoading(true);
+    setError("");
+    try {
+      const qs = role === "super_admin" ? `?cafeId=${encodeURIComponent(adminCafeId)}` : "";
+      await apiFetch(`/api/admin/menu/all${qs}`, {
+        method: "DELETE",
+        headers: { ...authHeaders() },
+      });
+      setItems([]);
+    } catch (e) {
+      setError(e.message || "Failed to delete all menu items");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadCsvTemplate = () => {
+    const header = "name,price,category,description,type,image,isSpecial,isAvailable";
+    const sample = "House Espresso,180,Coffee,Short espresso shot,veg,https://example.com/espresso.jpg,false,true";
+    const blob = new Blob([`${header}\n${sample}\n`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "menu-template.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const loadStaff = async () => {
     if (!requireLogin(false)) return;
     if (!staffCafeId) {
@@ -559,6 +733,7 @@ export default function AdminMenuPage() {
 
   useEffect(() => {
     setBaseCustomerUrl(typeof window !== "undefined" ? window.location.origin : "");
+    setQrApiBaseUrl(getApiBaseUrl() || "");
   }, []);
 
   useEffect(() => {
@@ -1017,6 +1192,9 @@ export default function AdminMenuPage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={deleteAllTables} disabled={tablesLoading || !tablesCafeId}>
+                  Delete all QRs
+                </Button>
                 <Button variant="outline" onClick={loadTables} disabled={tablesLoading || !tablesCafeId}>
                   Refresh tables
                 </Button>
@@ -1066,7 +1244,13 @@ export default function AdminMenuPage() {
               <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {tables.map((table) => {
                   const tableUrl = `${baseCustomerUrl}/${tablesCafeId}?table=${table.tableNumber}`;
-                  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(tableUrl)}`;
+                  const qrUrl = qrApiBaseUrl
+                    ? `${qrApiBaseUrl}/api/qr/table?cafeId=${encodeURIComponent(
+                        tablesCafeId
+                      )}&tableNumber=${encodeURIComponent(
+                        table.tableNumber
+                      )}&baseUrl=${encodeURIComponent(baseCustomerUrl)}&size=260`
+                    : `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(tableUrl)}`;
                   const statusLabel = table.status === "reserved" ? "Reserved" : "Free";
                   const statusClass =
                     table.status === "reserved"
@@ -1219,6 +1403,94 @@ export default function AdminMenuPage() {
         <div id="admin-menu-editor" className="grid grid-cols-1 lg:grid-cols-[0.95fr_1.05fr] gap-6">
           <Card className="border border-orange-100 shadow-xl">
             <CardContent>
+              <div className="mb-6 rounded-2xl border border-orange-100 bg-white/80 p-4">
+                <div className="text-sm font-bold text-slate-900">Bulk upload menu (CSV)</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Columns: name, price, category, description, type, image, isSpecial, isAvailable
+                </div>
+                <form className="mt-3 flex flex-wrap items-center gap-3" onSubmit={uploadMenuCsv}>
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={(e) => handleCsvFileChange(e.target.files?.[0] || null)}
+                    className="text-sm text-slate-600"
+                  />
+                  <Button variant="outline" type="submit" disabled={csvUploading}>
+                    {csvUploading ? "Uploading..." : "Upload CSV"}
+                  </Button>
+                  <Button variant="outline" type="button" onClick={downloadCsvTemplate}>
+                    Download template
+                  </Button>
+                  {csvError && <div className="text-sm font-semibold text-red-700">{csvError}</div>}
+                  {csvSuccess && <div className="text-sm font-semibold text-emerald-700">{csvSuccess}</div>}
+                </form>
+                {csvErrors.length > 0 && (
+                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                    <div className="font-semibold">Rows skipped:</div>
+                    <ul className="mt-2 space-y-1">
+                      {csvErrors.map((e, idx) => (
+                        <li key={`${e.row}-${idx}`}>Line {e.row}: {e.message}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {csvPreviewErrors.length > 0 && (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                    <div className="font-semibold">Preview warnings:</div>
+                    <ul className="mt-2 space-y-1">
+                      {csvPreviewErrors.slice(0, 10).map((e, idx) => (
+                        <li key={`${e.row}-${idx}`}>Line {e.row}: {e.message}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {csvPreviewLoading && (
+                  <div className="mt-4 text-xs text-slate-500">Generating preview...</div>
+                )}
+                {csvPreview.length > 0 && !csvPreviewLoading && (
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3">
+                    <div className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      Preview ({csvPreview.length} rows)
+                    </div>
+                    <div className="mt-3 overflow-auto">
+                      <table className="w-full text-xs text-slate-700">
+                        <thead>
+                          <tr className="text-left text-[11px] uppercase tracking-widest text-slate-400">
+                            <th className="py-2 pr-3">Name</th>
+                            <th className="py-2 pr-3">Price</th>
+                            <th className="py-2 pr-3">Category</th>
+                            <th className="py-2 pr-3">Type</th>
+                            <th className="py-2 pr-3">Image</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {csvPreview.map((row, idx) => (
+                            <tr key={`${row.name}-${idx}`} className="border-t border-slate-100">
+                              <td className="py-2 pr-3 font-semibold">{row.name || "-"}</td>
+                              <td className="py-2 pr-3">{row.price || "-"}</td>
+                              <td className="py-2 pr-3">{row.category || "-"}</td>
+                              <td className="py-2 pr-3">{row.type || "-"}</td>
+                              <td className="py-2 pr-3">
+                                {row.image ? (
+                                  <img src={row.image} alt={row.name || "Preview"} className="h-10 w-10 rounded-lg object-cover" />
+                                ) : (
+                                  "-"
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <Button variant="outline" type="button" onClick={deleteAllMenuItems} disabled={loading}>
+                    Delete all menu items
+                  </Button>
+                  <span className="text-xs text-slate-500">This removes every item for this cafe.</span>
+                </div>
+              </div>
               <h2 className="text-xl font-bold mb-4">Add new item</h2>
               <form onSubmit={createItem} className="grid grid-cols-1 gap-3">
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" required />

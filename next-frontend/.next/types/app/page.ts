@@ -1,4 +1,4 @@
-// File: /Users/parthshende/Projects/CR-QR/Cafe-qr-based-software/next-frontend/app/page.js
+// File: C:\Users\vansh\Cafe-qr-based-software\next-frontend\app\page.js
 import * as entry from '../../../app/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

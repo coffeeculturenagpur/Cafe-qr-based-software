@@ -1,10 +1,20 @@
 {
   "pages": {
+    "/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/page.js"
+    ],
     "/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
+    ],
+    "/[cafeId]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/[cafeId]/page.js"
     ],
     "/login/page": [
       "static/chunks/webpack.js",
@@ -16,25 +26,35 @@
       "static/chunks/main-app.js",
       "static/chunks/app/login/loading.js"
     ],
-    "/[cafeId]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/[cafeId]/page.js"
-    ],
     "/admin/menu/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/admin/menu/page.js"
     ],
-    "/page": [
+    "/super-admin/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
+      "static/chunks/app/super-admin/page.js"
     ],
-    "/_not-found/page": [
+    "/[cafeId]/menu/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/_not-found/page.js"
+      "static/chunks/app/[cafeId]/menu/page.js"
+    ],
+    "/[cafeId]/menu/loading": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/[cafeId]/menu/loading.js"
+    ],
+    "/[cafeId]/orders/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/[cafeId]/orders/page.js"
+    ],
+    "/[cafeId]/cart/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/[cafeId]/cart/page.js"
     ]
   }
 }

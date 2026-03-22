@@ -13,6 +13,7 @@ const customerRoutes = require('./routes/customerRoutes');
 const adminUserRoutes = require('./routes/adminUserRoutes');
 const adminMediaRoutes = require('./routes/adminMediaRoutes');
 const adminCafeRoutes = require('./routes/adminCafeRoutes');
+const qrRoutes = require('./routes/qrRoutes');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const { initSocket } = require('./realtime/socket');
@@ -45,6 +46,7 @@ app.use('/api/superadmin', superAdminRoutes);
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/admin/media', adminMediaRoutes);
 app.use('/api/admin/cafe', adminCafeRoutes);
+app.use('/api/qr', qrRoutes);
 
 // Health check
 app.get('/', (req, res) => {
