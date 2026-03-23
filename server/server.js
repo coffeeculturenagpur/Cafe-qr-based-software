@@ -22,9 +22,17 @@ dotenv.config();
 connectDB();
 
 const app = express();
+const envOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 const allowedOrigins = [
   "http://localhost:5000",
+  "http://localhost:3000",
   "https://cafe-qr-based-software.onrender.com",
+  "https://coffee-culture-nagpur.netlify.app/",
+  ...envOrigins,
 ];
 
 app.use(
