@@ -50,6 +50,94 @@ export default function KitchenPage() {
     return { total, queue, preparing };
   }, [orders]);
 
+  const groupedOrders = useMemo(() => {
+    const map = new Map();
+    for (const o of orders) {
+      const tableNumber = o?.tableNumber;
+      const customerName = (o?.customerName || "").trim();
+      const phone = (o?.phone || "").trim();
+      const key = `${tableNumber}||${customerName}||${phone}`;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          tableNumber,
+          customerName,
+          phone,
+          orderIds: [],
+          orders: [],
+          itemsMap: new Map(),
+          lineSubtotal: 0,
+        });
+      }
+
+      const g = map.get(key);
+      g.orderIds.push(o._id);
+      g.orders.push(o);
+
+      for (const it of o.items || []) {
+        const unitPrice = Number(it.price || 0);
+        const qty = Number(it.qty || 0);
+        const itemKey = it.menuItemId ? String(it.menuItemId) : `${it.name}__${unitPrice}`;
+
+        const existing = g.itemsMap.get(itemKey);
+        if (existing) {
+          existing.qty += qty;
+        } else {
+          g.itemsMap.set(itemKey, { name: it.name, unitPrice, qty });
+        }
+      }
+    }
+
+    return Array.from(map.values()).map((g) => {
+      let lineSubtotal = 0;
+      const items = Array.from(g.itemsMap.values()).map((it) => {
+        const lineTotal = Number(it.unitPrice) * Number(it.qty);
+        lineSubtotal += lineTotal;
+        return { ...it, lineTotal };
+      });
+
+      const allServedOrPaid = g.orders.length > 0 && g.orders.every((o) => ["served", "paid"].includes(o.status));
+      const overallStatus = g.orders.some((o) => o.status === "served" || o.status === "paid")
+        ? "served"
+        : g.orders.some((o) => ["preparing", "baking"].includes(o.status))
+          ? "preparing"
+          : "accepted";
+
+      return {
+        ...g,
+        items,
+        lineSubtotal,
+        allServedOrPaid,
+        overallStatus,
+      };
+    });
+  }, [orders]);
+
+  const computeTotals = (lineSubtotal) => {
+    const round2 = (n) => Math.round(Number(n) * 100) / 100;
+    const subtotalAmount = round2(lineSubtotal);
+    const taxPct = Number(cafeInfo?.taxPercent || 0);
+    const discType = cafeInfo?.discountType || "percent";
+    const discVal = Number(cafeInfo?.discountValue || 0);
+
+    let discountAmount = 0;
+    let afterDiscount = subtotalAmount;
+
+    if (discType === "percent") {
+      const pct = Math.min(Math.max(discVal, 0), 100);
+      discountAmount = round2(subtotalAmount * (pct / 100));
+      afterDiscount = round2(subtotalAmount - discountAmount);
+    } else {
+      discountAmount = round2(Math.min(discVal, subtotalAmount));
+      afterDiscount = round2(subtotalAmount - discountAmount);
+    }
+
+    const taxAmount = round2(afterDiscount * (taxPct / 100));
+    const totalAmount = round2(afterDiscount + taxAmount);
+    return { subtotalAmount, discountAmount, taxAmount, totalAmount };
+  };
+
   const load = async () => {
     if (!cafeId) return;
     setLoading(true);
@@ -154,6 +242,125 @@ export default function KitchenPage() {
     }
   };
 
+  const setGroupStatus = async (orderIds, status) => {
+    if (!Array.isArray(orderIds) || orderIds.length === 0) return;
+    setLoading(true);
+    setError("");
+    try {
+      const updatedOrders = await Promise.all(
+        orderIds.map((orderId) =>
+          apiFetch(`/api/orders/${orderId}`, {
+            method: "PUT",
+            headers: { ...(token ? authHeaders() : {}) },
+            body: JSON.stringify({ status }),
+          })
+        )
+      );
+
+      setOrders((prev) => {
+        const next = updatedOrders.reduce((acc, updated) => upsertOrder(acc, updated), prev);
+        return filterKitchenLiveOrders(next);
+      });
+    } catch (e) {
+      setError(e.message || "Failed to update orders");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadBillPdf = (bill) => {
+    const itemsRows = (bill.items || [])
+      .map(
+        (it) => `
+          <tr>
+            <td>${it.name}</td>
+            <td class="qty">${it.qty}</td>
+            <td class="price">INR ${(Number(it.unitPrice || 0) * Number(it.qty || 0)).toFixed(2)}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    const totals = bill.totals || { subtotalAmount: 0, discountAmount: 0, taxAmount: 0, totalAmount: 0 };
+    const cafeName = cafeInfo?.name || "QRDine";
+    const cafeLogo = cafeInfo?.logoUrl || "";
+    const createdAt = new Date().toLocaleString();
+
+    const html = `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Bill</title>
+          <style>
+            @page { size: 80mm auto; margin: 8mm; }
+            body { font-family: "Arial", sans-serif; color: #111827; }
+            .logo { display: block; margin: 0 auto 8px; max-width: 120px; max-height: 60px; object-fit: contain; }
+            .cafe-name { text-align: center; font-weight: 700; margin-bottom: 6px; }
+            h1 { font-size: 16px; margin: 0 0 6px; }
+            .meta { font-size: 12px; margin-bottom: 10px; color: #374151; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { padding: 6px 0; border-bottom: 1px dashed #e5e7eb; }
+            th { text-align: left; font-size: 11px; text-transform: uppercase; color: #6b7280; }
+            td.qty { text-align: center; width: 24px; }
+            td.price { text-align: right; width: 70px; }
+            .line { margin-top: 6px; display: flex; justify-content: space-between; font-size: 12px; color: #374151; }
+            .total { margin-top: 10px; display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; }
+            .footer { margin-top: 8px; font-size: 11px; color: #6b7280; text-align: center; }
+          </style>
+        </head>
+        <body>
+          ${cafeLogo ? `<img class="logo" src="${cafeLogo}" alt="Cafe logo" />` : ""}
+          <div class="cafe-name">${cafeName}</div>
+          <h1>Bill</h1>
+          <div class="meta">
+            <div>Table: ${bill.tableNumber}</div>
+            <div>Customer: ${bill.customerName || "Guest"}</div>
+            <div>Phone: ${bill.phone || "-"}</div>
+            <div>Date: ${createdAt}</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th class="qty">Qty</th>
+                <th class="price">Total</th>
+              </tr>
+            </thead>
+            <tbody>${itemsRows}</tbody>
+          </table>
+          <div class="line">
+            <span>Subtotal</span>
+            <span>INR ${Number(totals.subtotalAmount || 0).toFixed(2)}</span>
+          </div>
+          ${Number(totals.discountAmount || 0) > 0 ? `
+          <div class="line">
+            <span>Discount</span>
+            <span>INR -${Number(totals.discountAmount || 0).toFixed(2)}</span>
+          </div>
+          ` : ""}
+          <div class="line">
+            <span>Tax</span>
+            <span>INR ${Number(totals.taxAmount || 0).toFixed(2)}</span>
+          </div>
+          <div class="total">
+            <span>Total</span>
+            <span>INR ${Number(totals.totalAmount || 0).toFixed(2)}</span>
+          </div>
+          <div class="footer">Generated by QRDine</div>
+        </body>
+      </html>
+    `;
+
+    const receiptWindow = window.open("", "_blank", "width=480,height=640");
+    if (!receiptWindow) return;
+    receiptWindow.document.open();
+    receiptWindow.document.write(html);
+    receiptWindow.document.close();
+    receiptWindow.focus();
+    setTimeout(() => receiptWindow.print(), 250);
+  };
+
   const motionInitial = mounted && !reducedMotion ? { opacity: 0, y: 10 } : false;
 
   if (!authReady) {
@@ -241,89 +448,114 @@ export default function KitchenPage() {
       {error && <div className="text-red-700 font-semibold">{error}</div>}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {orders.map((o) => (
-          <motion.div key={o._id} initial={motionInitial} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-            <Card className="border border-orange-100 shadow-lg">
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-extrabold text-slate-900">Table {o.tableNumber}</div>
-                    <div className="text-sm text-gray-600">
-                      {o.customerName} - {o.phone}
+        {groupedOrders.map((g) => {
+          const totals = computeTotals(g.lineSubtotal);
+          const groupReadyForBill = g.allServedOrPaid;
+          return (
+            <motion.div key={g.key} initial={motionInitial} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+              <Card className="border border-orange-100 shadow-lg">
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-extrabold text-slate-900">Table {g.tableNumber}</div>
+                      <div className="text-sm text-gray-600">
+                        {g.customerName} - {g.phone}
+                      </div>
+                    </div>
+                    <div className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold uppercase text-orange-700">
+                      {g.overallStatus}
                     </div>
                   </div>
-                  <div className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold uppercase text-orange-700">
-                    {o.status === "baking" ? "preparing" : o.status}
-                  </div>
-                </div>
 
-                <div className="mt-3 space-y-1 text-sm">
-                  {o.items.map((it, idx) => (
-                    <div key={idx} className="flex justify-between">
-                      <span>
-                        {it.name} x {it.qty}
-                      </span>
-                      <span>INR {(it.price * it.qty).toFixed(2)}</span>
+                  <div className="mt-3 space-y-1 text-sm">
+                    {g.items.map((it, idx) => (
+                      <div key={idx} className="flex justify-between">
+                        <span>
+                          {it.name} x {it.qty}
+                        </span>
+                        <span>INR {Number(it.lineTotal || 0).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {g.orders?.[0]?.paymentMode && (
+                    <div className="mt-2 text-xs font-semibold text-slate-600">
+                      Payment: {String(g.orders[0].paymentMode).toUpperCase()}
                     </div>
-                  ))}
-                </div>
+                  )}
 
-                {o.paymentMode && (
-                  <div className="mt-2 text-xs font-semibold text-slate-600">
-                    Payment: {String(o.paymentMode).toUpperCase()}
-                  </div>
-                )}
-
-                {(() => {
-                  const lineSum = o.items.reduce((s, it) => s + Number(it.price || 0) * Number(it.qty || 0), 0);
-                  const hasServerPricing = typeof o.subtotalAmount === "number" && typeof o.taxAmount === "number";
-                  const subtotal = hasServerPricing ? Number(o.subtotalAmount) : Number(o.totalAmount || lineSum);
-                  const discount = typeof o.discountAmount === "number" ? Number(o.discountAmount) : 0;
-                  const taxRate = Number(cafeInfo?.taxPercent || 0);
-                  const taxAmount = hasServerPricing ? Number(o.taxAmount) : subtotal * (taxRate / 100);
-                  const totalFinal = hasServerPricing ? Number(o.totalAmount || 0) : subtotal + taxAmount;
-                  return (
-                    <div className="mt-3 space-y-1 text-sm">
+                  <div className="mt-3 space-y-1 text-sm">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Subtotal</span>
+                      <span>INR {totals.subtotalAmount.toFixed(2)}</span>
+                    </div>
+                    {totals.discountAmount > 0 && (
                       <div className="flex justify-between text-slate-600">
-                        <span>Subtotal</span>
-                        <span>INR {subtotal.toFixed(2)}</span>
+                        <span>Discount</span>
+                        <span>- INR {totals.discountAmount.toFixed(2)}</span>
                       </div>
-                      {discount > 0 && (
-                        <div className="flex justify-between text-slate-600">
-                          <span>Discount</span>
-                          <span>- INR {discount.toFixed(2)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between text-slate-600">
-                        <span>Tax {!hasServerPricing && taxRate ? `(${taxRate}%)` : ""}</span>
-                        <span>INR {taxAmount.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between font-extrabold text-slate-900">
-                        <span>Total</span>
-                        <span>INR {totalFinal.toFixed(2)}</span>
-                      </div>
+                    )}
+                    <div className="flex justify-between text-slate-600">
+                      <span>Tax</span>
+                      <span>INR {totals.taxAmount.toFixed(2)}</span>
                     </div>
-                  );
-                })()}
+                    <div className="flex justify-between font-extrabold text-slate-900">
+                      <span>Total</span>
+                      <span>INR {totals.totalAmount.toFixed(2)}</span>
+                    </div>
+                  </div>
 
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Button variant="outline" onClick={() => setStatus(o._id, "accepted")} disabled={loading}>
-                    Accepted
-                  </Button>
-                  <Button variant="outline" onClick={() => setStatus(o._id, "preparing")} disabled={loading}>
-                    Preparing
-                  </Button>
-                  <Button variant="outline" onClick={() => setStatus(o._id, "ready")} disabled={loading}>
-                    Ready
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {groupReadyForBill ? (
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          downloadBillPdf({
+                            tableNumber: g.tableNumber,
+                            customerName: g.customerName,
+                            phone: g.phone,
+                            items: g.items,
+                            totals,
+                          })
+                        }
+                        disabled={loading}
+                      >
+                        Generate Bill
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          variant="outline"
+                          onClick={() => setGroupStatus(g.orders.filter((o) => o.status === "pending").map((o) => o._id), "accepted")}
+                          disabled={loading}
+                        >
+                          Accepted
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setGroupStatus(g.orders.filter((o) => o.status === "accepted").map((o) => o._id), "preparing")}
+                          disabled={loading}
+                        >
+                          Preparing
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setGroupStatus(g.orders.filter((o) => ["preparing", "baking"].includes(o.status)).map((o) => o._id), "ready")}
+                          disabled={loading}
+                        >
+                          Ready
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          );
+        })}
       </div>
 
-      {!loading && cafeId && orders.length === 0 && <div className="text-gray-700">No orders yet.</div>}
+      {!loading && cafeId && groupedOrders.length === 0 && <div className="text-gray-700">No orders yet.</div>}
     </StaffShell>
   );
 }

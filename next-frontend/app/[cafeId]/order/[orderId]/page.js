@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, Wifi, Sparkles } from "lucide-react";
+import { Wifi, Sparkles } from "lucide-react";
 import { apiFetch } from "../../../../lib/api";
 import { connectCafeSocket } from "../../../../lib/socket";
 import { Button } from "../../../../components/ui/Button";
@@ -162,28 +162,19 @@ export default function OrderStatusPage() {
     <main className="min-h-screen">
       <div className="sticky top-0 z-20 border-b border-white/60 bg-white/85 backdrop-blur">
         <div className="mx-auto flex w-full max-w-md items-center justify-between gap-2 px-4 py-3">
-          <Button
-            variant="outline"
-            className="h-9 w-9 shrink-0 rounded-full p-0"
-            onClick={() => router.push(`/${cafeId}/menu?table=${tableNumber}&t=${encodeURIComponent(tableToken)}`)}
-          >
-            <ArrowLeft size={18} className="text-slate-900" />
-          </Button>
+          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-white shadow ring-2 ring-white">
+            {cafeInfo?.logoUrl ? (
+              <img src={cafeInfo.logoUrl} alt={cafeInfo?.name || "Cafe"} className="h-full w-full object-cover" />
+            ) : (
+              <div className="h-full w-full bg-gradient-to-br from-orange-200 to-amber-200" />
+            )}
+          </div>
           <div className="min-w-0 flex-1 text-center">
             <div className="text-xs text-slate-500">Table {tableNumber || "?"}</div>
             <div className="text-sm font-semibold text-slate-900">Order Tracker</div>
-            <div className="mt-2 flex items-center justify-center">
-              <div className="h-10 w-10 rounded-full bg-white shadow ring-2 ring-white overflow-hidden">
-                {cafeInfo?.logoUrl ? (
-                  <img src={cafeInfo.logoUrl} alt={cafeInfo?.name || "Cafe"} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="h-full w-full bg-gradient-to-br from-orange-200 to-amber-200" />
-                )}
-              </div>
-            </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <SoundControl />
+            <SoundControl showVibrate={false} />
             <Button variant="outline" className="h-9 rounded-full px-3 text-xs" onClick={load}>
               Refresh
             </Button>

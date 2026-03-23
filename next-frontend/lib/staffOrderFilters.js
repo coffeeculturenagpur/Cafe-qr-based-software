@@ -1,5 +1,6 @@
 /** Statuses hidden from kitchen live board (handed off or completed). */
-const KITCHEN_LIVE_EXCLUDED = new Set(["ready", "served", "paid"]);
+// Keep `served` visible so chef can generate a combined bill for served orders.
+const KITCHEN_LIVE_EXCLUDED = new Set(["ready", "paid"]);
 
 /** Statuses visible on waiter live board (ready to serve or in service). */
 const WAITER_LIVE_VISIBLE = new Set(["ready", "served"]);

@@ -4,10 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import {
-  ArrowLeft,
   Leaf,
   Plus,
-  ShoppingCart,
   Star,
   Search,
   MapPin,
@@ -50,6 +48,7 @@ export default function MenuPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [cart, setCart] = useState([]);
+  const [cartHydrated, setCartHydrated] = useState(false);
   const [cafe, setCafe] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -66,7 +65,11 @@ export default function MenuPage() {
   });
 
   useEffect(() => {
-    if (!cafeId || !tableNumber) return;
+    if (!cafeId || !Number.isFinite(tableNumber)) {
+      setCart([]);
+      setCartHydrated(false);
+      return;
+    }
     try {
       const raw = localStorage.getItem(cartKey(cafeId, tableNumber));
       const parsed = raw ? JSON.parse(raw) : [];
@@ -74,17 +77,19 @@ export default function MenuPage() {
     } catch {
       setCart([]);
     }
+    setCartHydrated(true);
   }, [cafeId, tableNumber]);
 
   const persistCart = (nextCart) => {
-    if (!cafeId || !tableNumber) return;
+    if (!cafeId || !Number.isFinite(tableNumber)) return;
     localStorage.setItem(cartKey(cafeId, tableNumber), JSON.stringify(nextCart));
   };
 
   useEffect(() => {
-    if (!cafeId || !tableNumber) return;
+    if (!cartHydrated) return;
+    if (!cafeId || !Number.isFinite(tableNumber)) return;
     localStorage.setItem(cartKey(cafeId, tableNumber), JSON.stringify(cart));
-  }, [cart, cafeId, tableNumber]);
+  }, [cartHydrated, cart, cafeId, tableNumber]);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,6 +160,7 @@ export default function MenuPage() {
   }, [cafeId]);
 
   const add = (item) => {
+    if (!cartHydrated) return;
     playAddToCart();
     setCart((prev) => {
       const found = prev.find((x) => x._id === item._id);
@@ -167,6 +173,7 @@ export default function MenuPage() {
   };
 
   const remove = (item) => {
+    if (!cartHydrated) return;
     setCart((prev) => {
       const next = prev
         .map((x) => (x._id === item._id ? { ...x, qty: x.qty - 1 } : x))
@@ -271,19 +278,7 @@ export default function MenuPage() {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <SoundControl />
-            <Button
-              variant="outline"
-              className="relative h-10 w-10 rounded-full p-0 border-2 border-slate-400 bg-white shadow-md hover:bg-white ring-1 ring-slate-200"
-              onClick={openCart}
-            >
-              <ShoppingCart size={18} strokeWidth={2.2} className="text-slate-900" />
-              {cartCount > 0 && (
-                <span className="absolute -right-1 -top-1 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                  {cartCount}
-                </span>
-              )}
-            </Button>
+            <SoundControl showVibrate={false} />
           </div>
         </div>
       </div>

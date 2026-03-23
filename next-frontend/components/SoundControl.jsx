@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Volume2, VolumeX, Smartphone } from "lucide-react";
 import { getSoundPreferences, setSoundPreferences } from "../lib/soundPreferences";
 
-export default function SoundControl({ className = "" }) {
+export default function SoundControl({ className = "", showVibrate = true }) {
   // Use a deterministic default for the first render to prevent hydration mismatches.
   const [prefs, setPrefs] = useState({ muted: true, volume: 0.65, vibrate: true });
 
@@ -44,17 +44,19 @@ export default function SoundControl({ className = "" }) {
           <Volume2 size={18} strokeWidth={2.2} className="text-slate-700" />
         )}
       </button>
-      <button
-        type="button"
-        onClick={toggleVibrate}
-        className={`flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-slate-100 ${
-          prefs.vibrate ? "text-slate-700" : "text-slate-400"
-        }`}
-        aria-pressed={prefs.vibrate}
-        aria-label={prefs.vibrate ? "Vibration on" : "Vibration off"}
-      >
-        <Smartphone size={18} strokeWidth={2.2} className={prefs.vibrate ? "text-slate-700" : "text-slate-400"} />
-      </button>
+      {showVibrate && (
+        <button
+          type="button"
+          onClick={toggleVibrate}
+          className={`flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-slate-100 ${
+            prefs.vibrate ? "text-slate-700" : "text-slate-400"
+          }`}
+          aria-pressed={prefs.vibrate}
+          aria-label={prefs.vibrate ? "Vibration on" : "Vibration off"}
+        >
+          <Smartphone size={18} strokeWidth={2.2} className={prefs.vibrate ? "text-slate-700" : "text-slate-400"} />
+        </button>
+      )}
     </div>
   );
 }
