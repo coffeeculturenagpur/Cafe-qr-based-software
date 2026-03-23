@@ -15,6 +15,7 @@ import { getOrCreateVisitId } from "../../../lib/visitSession";
 import { setCssVarsFromCafe } from "../../../lib/theme";
 import { formatIndianMobileInput, normalizeIndianMobile } from "../../../lib/phoneIn";
 import { useTableGuard } from "../../../lib/useTableGuard";
+import { motion, useReducedMotion } from "framer-motion";
 
 function cartKey(cafeId, tableNumber) {
   return `cart:${cafeId}:table:${tableNumber}`;
@@ -42,11 +43,13 @@ export default function CartPage() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [notes, setNotes] = useState("");
+  const [paymentMode] = useState("cash");
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState("");
   const [showDetails, setShowDetails] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [phoneError, setPhoneError] = useState("");
+  const reducedMotion = useReducedMotion();
   const tableGuard = useTableGuard({
     cafeId,
     tableNumber,
@@ -135,6 +138,8 @@ export default function CartPage() {
   const taxRate = Number(cafeInfo?.taxPercent || 0);
   const taxAmount = subtotal * (taxRate / 100);
   const total = subtotal + taxAmount;
+  const canPlace = cart.length > 0 && !placing;
+  const totalItems = cart.reduce((sum, x) => sum + x.qty, 0);
 
   const updateQty = (id, delta) => {
     setCart((prev) =>
@@ -210,6 +215,7 @@ export default function CartPage() {
           phone: phoneDigits,
           customerLat,
           customerLng,
+          paymentMode,
           items: cart.map((x) => ({ name: x.name, price: x.price, qty: x.qty, menuItemId: x._id })),
         }),
       });
@@ -247,8 +253,12 @@ export default function CartPage() {
     );
   }
 
+  const itemMotion = reducedMotion
+    ? {}
+    : { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2 } };
+
   return (
-    <CustomerShell bottomInsetClass="pb-36">
+    <CustomerShell bottomInsetClass="pb-44">
     <main className="min-h-screen">
       <div className="sticky top-0 z-20 border-b border-white/60 bg-white/85 backdrop-blur">
         <div className="mx-auto flex w-full max-w-md items-center justify-between gap-2 px-4 py-3">
@@ -289,25 +299,37 @@ export default function CartPage() {
         ) : (
           <div className="mt-4 space-y-4">
             {cart.map((x) => (
-              <Card key={x._id} className="rounded-3xl border border-white/70 bg-white/85 shadow-sm">
-                <CardContent>
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="text-sm font-semibold text-slate-900">{x.name}</div>
-                      <div className="text-xs text-slate-500">INR {Number(x.price || 0).toFixed(0)}</div>
+              <motion.div key={x._id} {...itemMotion}>
+                <Card className="rounded-3xl border border-white/70 bg-white/85 shadow-sm">
+                  <CardContent>
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">{x.name}</div>
+                        <div className="text-xs text-slate-500">INR {Number(x.price || 0).toFixed(0)}</div>
+                      </div>
+                      <div className="flex items-center rounded-full border border-orange-200 bg-white px-1 py-1 shadow-sm">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 w-8 rounded-full p-0"
+                          onClick={() => updateQty(x._id, -1)}
+                        >
+                          <Minus size={16} />
+                        </Button>
+                        <div className="min-w-8 text-center text-sm font-semibold">{x.qty}</div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 w-8 rounded-full p-0"
+                          onClick={() => updateQty(x._id, 1)}
+                        >
+                          <Plus size={16} />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" className="h-8 w-8 rounded-full p-0 text-lg font-bold" onClick={() => updateQty(x._id, -1)}>
-                        -
-                      </Button>
-                      <div className="min-w-6 text-center text-sm font-semibold">{x.qty}</div>
-                      <Button variant="outline" className="h-8 w-8 rounded-full p-0 text-lg font-bold" onClick={() => updateQty(x._id, 1)}>
-                        +
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </motion.div>
             ))}
 
             <Card className="rounded-3xl border border-white/70 bg-white/85 shadow-sm">
@@ -343,10 +365,12 @@ export default function CartPage() {
 
                 {error && <div className="mt-3 text-sm font-semibold text-red-700">{error}</div>}
 
-                <Button className="mt-4 w-full rounded-full" onClick={placeOrder} disabled={placing}>
+                <Button className="mt-4 w-full rounded-full" onClick={placeOrder} disabled={!canPlace}>
                   {placing ? "Placing..." : "Place Order"}
                 </Button>
-                <div className="mt-2 text-xs text-slate-500">Pay at counter after your order is ready.</div>
+                <div className="mt-2 text-xs text-slate-500">
+                  Add items and confirm quantity before placing your order.
+                </div>
               </CardContent>
             </Card>
           </div>

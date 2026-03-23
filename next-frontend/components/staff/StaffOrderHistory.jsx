@@ -50,6 +50,7 @@ export default function StaffOrderHistory({ title, backHref, roleGate, dashboard
       if (minTotal !== "") qs.set("minTotal", String(minTotal));
       if (maxTotal !== "") qs.set("maxTotal", String(maxTotal));
       if (status.trim()) qs.set("status", status.trim());
+      qs.set("scope", "history");
       const q = qs.toString();
       const list = await apiFetch(`/api/orders/${cafeId}${q ? `?${q}` : ""}`, {
         headers: { ...(token ? authHeaders() : {}) },
@@ -148,6 +149,11 @@ export default function StaffOrderHistory({ title, backHref, roleGate, dashboard
               <div className="mt-2 text-sm text-slate-700">
                 {o.customerName} · {o.phone}
               </div>
+              {o.paymentMode && (
+                <div className="mt-1 text-xs font-semibold text-slate-500">
+                  Payment: {String(o.paymentMode).toUpperCase()}
+                </div>
+              )}
               <div className="mt-2 flex justify-between text-sm font-semibold text-slate-900">
                 <span>Total</span>
                 <span>INR {Number(o.totalAmount || 0).toFixed(2)}</span>

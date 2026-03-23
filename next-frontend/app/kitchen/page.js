@@ -195,6 +195,7 @@ export default function KitchenPage() {
               <div className="text-xs uppercase tracking-wide text-slate-500">Preparing</div>
             </div>
           </div>
+          <div className="text-xs text-slate-600 mt-2">Prepared = Ready</div>
         </>
       }
     >
@@ -266,6 +267,12 @@ export default function KitchenPage() {
                     </div>
                   ))}
                 </div>
+
+                {o.paymentMode && (
+                  <div className="mt-2 text-xs font-semibold text-slate-600">
+                    Payment: {String(o.paymentMode).toUpperCase()}
+                  </div>
+                )}
 
                 {(() => {
                   const lineSum = o.items.reduce((s, it) => s + Number(it.price || 0) * Number(it.qty || 0), 0);

@@ -43,6 +43,8 @@ export default function OrderStatusPage() {
   const [error, setError] = useState("");
   const [socketState, setSocketState] = useState("disconnected");
   const [cafeInfo, setCafeInfo] = useState(null);
+  const [paymentChoice, setPaymentChoice] = useState("cash");
+  const paymentTouched = useRef(false);
   const skipFirstStatusFx = useRef(true);
   const tableGuard = useTableGuard({
     cafeId,
@@ -64,6 +66,7 @@ export default function OrderStatusPage() {
 
   useEffect(() => {
     skipFirstStatusFx.current = true;
+    paymentTouched.current = false;
   }, [orderId]);
 
   useEffect(() => {
@@ -125,6 +128,13 @@ export default function OrderStatusPage() {
     playCustomerStatus();
     maybeNotifyBrowser("Order update", order.status);
   }, [order?.status]);
+
+  useEffect(() => {
+    if (paymentTouched.current) return;
+    if (order?.paymentMode) {
+      setPaymentChoice(order.paymentMode);
+    }
+  }, [order?.paymentMode]);
 
   if (tableGuard.status === "checking") {
     return (
@@ -298,6 +308,68 @@ export default function OrderStatusPage() {
                 <span>Total (incl. tax)</span>
                 <span>INR {totalWithTax.toFixed(0)}</span>
               </div>
+
+              {["served", "paid"].includes(order.status) && (
+                <div className="mt-4">
+                  <div className="text-sm font-semibold text-slate-900">Payment mode</div>
+                  <div className="mt-2 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        paymentTouched.current = true;
+                        setPaymentChoice("cash");
+                      }}
+                      className={`flex-1 rounded-full border px-4 py-2 text-center text-sm font-semibold ${
+                        paymentChoice === "cash"
+                          ? "border-orange-300 bg-gradient-to-r from-orange-500 to-amber-400 text-white"
+                          : "border-slate-300 text-slate-700"
+                      }`}
+                    >
+                      Cash
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        paymentTouched.current = true;
+                        setPaymentChoice("upi");
+                      }}
+                      className={`flex-1 rounded-full border px-4 py-2 text-center text-sm font-semibold ${
+                        paymentChoice === "upi"
+                          ? "border-orange-300 bg-gradient-to-r from-orange-500 to-amber-400 text-white"
+                          : "border-slate-300 text-slate-700"
+                      }`}
+                    >
+                      UPI
+                    </button>
+                  </div>
+                  <div className="mt-2 text-xs text-slate-600">
+                    {paymentChoice === "cash"
+                      ? "Cash will be collected by the waiter."
+                      : "Scan the QR to pay via UPI."}
+                  </div>
+                  {paymentChoice === "upi" && (
+                    <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
+                      <div className="text-xs font-semibold text-emerald-700">UPI QR</div>
+                      {cafeInfo?.upiQrUrl ? (
+                        <div className="mt-2 flex flex-col items-center gap-2">
+                          <img
+                            src={cafeInfo.upiQrUrl}
+                            alt="UPI QR"
+                            className="h-44 w-44 rounded-xl border border-emerald-200 object-cover"
+                          />
+                          <div className="text-[11px] text-emerald-700">
+                            Scan to pay. Show confirmation to the waiter.
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-xs text-emerald-700">
+                          UPI QR not set. Please ask the staff for payment details.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 flex items-center gap-2">
                 <Sparkles size={12} />

@@ -167,6 +167,7 @@ export default function AdminMenuPage() {
     address: "",
     logoUrl: "",
     brandImageUrl: "",
+    upiQrUrl: "",
     taxPercent: "",
     discountType: "percent",
     discountValue: "",
@@ -185,6 +186,8 @@ export default function AdminMenuPage() {
   const [cafeSuccess, setCafeSuccess] = useState("");
   const [cafeLogoUploading, setCafeLogoUploading] = useState(false);
   const [cafeBrandUploading, setCafeBrandUploading] = useState(false);
+  const [cafeUpiUploading, setCafeUpiUploading] = useState(false);
+  const [cafeUpiUploaded, setCafeUpiUploaded] = useState(false);
 
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -392,6 +395,7 @@ export default function AdminMenuPage() {
         address: data?.address || "",
         logoUrl: data?.logoUrl || "",
         brandImageUrl: data?.brandImageUrl || "",
+        upiQrUrl: data?.upiQrUrl || "",
         taxPercent: typeof data?.taxPercent === "number" ? String(data.taxPercent) : "",
         discountType: data?.discountType || "percent",
         discountValue:
@@ -467,6 +471,7 @@ export default function AdminMenuPage() {
         address: cafeForm.address,
         logoUrl: cafeForm.logoUrl,
         brandImageUrl: cafeForm.brandImageUrl,
+        upiQrUrl: cafeForm.upiQrUrl,
         taxPercent: cafeForm.taxPercent === "" ? 0 : Number(cafeForm.taxPercent),
         discountType: cafeForm.discountType || "percent",
         discountValue: cafeForm.discountValue === "" ? 0 : Number(cafeForm.discountValue),
@@ -1110,7 +1115,7 @@ export default function AdminMenuPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="font-bold">Cafe branding</div>
-                <div className="text-sm text-gray-600 mt-1">Update cafe name, logo, and brand image.</div>
+                <div className="text-sm text-gray-600 mt-1">Update cafe name, branding, and UPI QR.</div>
               </div>
               <Button variant="outline" onClick={loadCafe} disabled={cafeLoading || !cafeIdForAdmin}>
                 Refresh branding
@@ -1159,6 +1164,39 @@ export default function AdminMenuPage() {
                     className="text-sm text-slate-600"
                   />
                   {cafeBrandUploading && <div className="text-xs text-slate-500">Uploading brand image...</div>}
+                </div>
+                <div className="space-y-2">
+                  <Input
+                    value={cafeForm.upiQrUrl}
+                    onChange={(e) => setCafeForm((p) => ({ ...p, upiQrUrl: e.target.value }))}
+                    placeholder="UPI payment QR URL"
+                  />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      setCafeUpiUploaded(false);
+                      uploadCafeImage(
+                        e.target.files?.[0],
+                        (url) => {
+                          setCafeForm((p) => ({ ...p, upiQrUrl: url }));
+                          setCafeUpiUploaded(Boolean(url));
+                        },
+                        setCafeUpiUploading
+                      );
+                    }}
+                    className="text-sm text-slate-600"
+                  />
+                  {cafeUpiUploading && <div className="text-xs text-slate-500">Uploading UPI QR...</div>}
+                  {cafeUpiUploaded && !cafeUpiUploading && (
+                    <div className="text-xs font-semibold text-emerald-600">UPI QR uploaded.</div>
+                  )}
+                  {cafeForm.upiQrUrl ? (
+                    <div className="mt-2 rounded-2xl border border-orange-100 bg-white p-3">
+                      <div className="text-xs font-semibold text-slate-500">Preview</div>
+                      <img src={cafeForm.upiQrUrl} alt="UPI QR" className="mt-2 h-40 w-40 rounded-xl object-cover" />
+                    </div>
+                  ) : null}
                 </div>
                 <Input
                   value={cafeForm.taxPercent}

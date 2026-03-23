@@ -1,5 +1,9 @@
 {
-  "/page": "app/page.js",
-  "/[cafeId]/page": "app/[cafeId]/page.js",
-  "/login/page": "app/login/page.js"
+  "/_not-found/page": "app/_not-found/page.js",
+  "/admin/menu/page": "app/admin/menu/page.js",
+  "/[cafeId]/order/[orderId]/page": "app/[cafeId]/order/[orderId]/page.js",
+  "/login/page": "app/login/page.js",
+  "/waiter/page": "app/waiter/page.js",
+  "/kitchen/page": "app/kitchen/page.js",
+  "/[cafeId]/page": "app/[cafeId]/page.js"
 }

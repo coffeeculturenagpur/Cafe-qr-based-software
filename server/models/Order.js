@@ -31,6 +31,13 @@ const orderSchema = new mongoose.Schema(
     /** Final amount payable (after discount + tax) */
     totalAmount: { type: Number, required: true, min: 0 },
 
+    /** Customer-selected payment mode */
+    paymentMode: {
+      type: String,
+      enum: ["cash", "upi"],
+      default: "cash",
+    },
+
     status: {
       type: String,
       enum: ["pending", "accepted", "baking", "preparing", "ready", "served", "paid"],

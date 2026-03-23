@@ -1,15 +1,15 @@
 /** Statuses hidden from kitchen live board (handed off or completed). */
 const KITCHEN_LIVE_EXCLUDED = new Set(["ready", "served", "paid"]);
 
-/** Statuses hidden from waiter live board (settled). */
-const WAITER_LIVE_EXCLUDED = new Set(["paid"]);
+/** Statuses visible on waiter live board (ready to serve or in service). */
+const WAITER_LIVE_VISIBLE = new Set(["ready", "served"]);
 
 export function isKitchenLiveOrder(order) {
   return order?.status && !KITCHEN_LIVE_EXCLUDED.has(order.status);
 }
 
 export function isWaiterLiveOrder(order) {
-  return order?.status && !WAITER_LIVE_EXCLUDED.has(order.status);
+  return order?.status && WAITER_LIVE_VISIBLE.has(order.status);
 }
 
 export function filterKitchenLiveOrders(orders) {

@@ -3,6 +3,13 @@ const { getUserFromSocketToken } = require("../utils/jwtUser");
 
 let io = null;
 
+const ROLE_ROOMS = {
+  kitchen: "kitchen",
+  staff: "staff",
+  cafe_admin: "cafe_admin",
+  super_admin: "super_admin",
+};
+
 function initSocket(httpServer) {
   try {
     // Optional dependency: install `socket.io` to enable realtime.
@@ -32,6 +39,11 @@ function initSocket(httpServer) {
             socket.emit("JOIN_ERROR", { message: "Forbidden: cannot join this cafe room" });
             return;
           }
+          const role = ROLE_ROOMS[user.role];
+          if (role) {
+            socket.join(`cafe:${String(cafeId)}:role:${role}`);
+          }
+          return;
         }
         // No token: guest PWA / customer live order updates (still room-scoped by cafeId only)
         socket.join(`cafe:${String(cafeId)}`);
@@ -52,9 +64,52 @@ function initSocket(httpServer) {
   }
 }
 
+function emitToRole(cafeId, role, event, payload) {
+  if (!io || !cafeId || !role) return;
+  io.to(`cafe:${String(cafeId)}:role:${role}`).emit(event, payload);
+}
+
 function emitCafeEvent(cafeId, event, payload) {
   if (!io || !cafeId) return;
-  io.to(`cafe:${String(cafeId)}`).emit(event, payload);
+  const id = String(cafeId);
+
+  if (event === "NEW_ORDER") {
+    emitToRole(id, ROLE_ROOMS.kitchen, event, payload);
+    emitToRole(id, ROLE_ROOMS.cafe_admin, event, payload);
+    emitToRole(id, ROLE_ROOMS.super_admin, event, payload);
+    return;
+  }
+
+  if (event === "ORDER_READY") {
+    emitToRole(id, ROLE_ROOMS.staff, event, payload);
+    emitToRole(id, ROLE_ROOMS.kitchen, event, payload);
+    emitToRole(id, ROLE_ROOMS.cafe_admin, event, payload);
+    emitToRole(id, ROLE_ROOMS.super_admin, event, payload);
+    io.to(`cafe:${id}`).emit(event, payload);
+    return;
+  }
+
+  if (event === "ORDER_PAID") {
+    emitToRole(id, ROLE_ROOMS.staff, event, payload);
+    emitToRole(id, ROLE_ROOMS.kitchen, event, payload);
+    emitToRole(id, ROLE_ROOMS.cafe_admin, event, payload);
+    emitToRole(id, ROLE_ROOMS.super_admin, event, payload);
+    io.to(`cafe:${id}`).emit(event, payload);
+    return;
+  }
+
+  if (event === "ORDER_UPDATED") {
+    emitToRole(id, ROLE_ROOMS.kitchen, event, payload);
+    emitToRole(id, ROLE_ROOMS.cafe_admin, event, payload);
+    emitToRole(id, ROLE_ROOMS.super_admin, event, payload);
+    if (payload?.status && ["ready", "served", "paid"].includes(payload.status)) {
+      emitToRole(id, ROLE_ROOMS.staff, event, payload);
+    }
+    io.to(`cafe:${id}`).emit(event, payload);
+    return;
+  }
+
+  io.to(`cafe:${id}`).emit(event, payload);
 }
 
 module.exports = { initSocket, emitCafeEvent };

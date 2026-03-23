@@ -30,6 +30,7 @@ exports.updateCafe = async (req, res) => {
     if (typeof req.body.address === "string") updates.address = req.body.address;
     if (typeof req.body.logoUrl === "string") updates.logoUrl = req.body.logoUrl;
     if (typeof req.body.brandImageUrl === "string") updates.brandImageUrl = req.body.brandImageUrl;
+    if (typeof req.body.upiQrUrl === "string") updates.upiQrUrl = req.body.upiQrUrl;
     if (typeof req.body.taxPercent !== "undefined") updates.taxPercent = Number(req.body.taxPercent || 0);
     if (typeof req.body.discountType === "string") updates.discountType = req.body.discountType;
     if (typeof req.body.discountValue !== "undefined") {

@@ -23,7 +23,18 @@ exports.listOrdersByTableVenue = async (req, res) => {
 
 exports.createOrder = async (req, res) => {
   try {
-    const { cafeId, tableNumber, customerName, phone, items, visitId, customerLat, customerLng, tableToken } = req.body;
+    const {
+      cafeId,
+      tableNumber,
+      customerName,
+      phone,
+      items,
+      visitId,
+      customerLat,
+      customerLng,
+      tableToken,
+      paymentMode,
+    } = req.body;
     if (!cafeId) return res.status(400).json({ message: "cafeId is required" });
     const visit = typeof visitId === "string" ? visitId.trim() : "";
     if (!visit) return res.status(400).json({ message: "visitId is required" });
@@ -102,6 +113,13 @@ exports.createOrder = async (req, res) => {
 
     const { subtotalAmount, discountAmount, taxAmount, totalAmount } = computeOrderTotals(cafe, lineSubtotal);
 
+    const normalizedPayment =
+      typeof paymentMode === "string" ? paymentMode.trim().toLowerCase() : "";
+    const paymentValue = normalizedPayment || "cash";
+    if (!["cash", "upi"].includes(paymentValue)) {
+      return res.status(400).json({ message: "paymentMode must be 'cash' or 'upi'" });
+    }
+
     const order = await Order.create({
       cafeId,
       tableNumber,
@@ -113,6 +131,7 @@ exports.createOrder = async (req, res) => {
       discountAmount,
       taxAmount,
       totalAmount,
+      paymentMode: paymentValue,
       status: "pending",
     });
 
@@ -170,6 +189,20 @@ exports.listOrdersByCafe = async (req, res) => {
         .filter(Boolean);
       if (parts.length === 1) q.status = parts[0];
       else if (parts.length > 1) q.status = { $in: parts };
+    }
+
+    // Waiter/staff should only see live orders after the chef marks them ready.
+    // History view (scope=history) is allowed to see all statuses.
+    if (req.user?.role === "staff" && String(req.query.scope || "") !== "history") {
+      const staffVisible = ["ready", "served"];
+      if (q.status) {
+        const current = Array.isArray(q.status.$in)
+          ? q.status.$in
+          : [q.status];
+        q.status = { $in: current.filter((s) => staffVisible.includes(s)) };
+      } else {
+        q.status = { $in: staffVisible };
+      }
     }
 
     const orders = await Order.find(q).sort({ createdAt: -1 });
