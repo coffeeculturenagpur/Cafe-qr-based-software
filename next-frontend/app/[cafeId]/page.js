@@ -19,12 +19,19 @@ export default function CafeEntryPage() {
 
   const [cafe, setCafe] = useState(null);
   const [splash, setSplash] = useState(true);
+  const [minDelayDone, setMinDelayDone] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const timer = setTimeout(() => setSplash(false), 2200);
+    const timer = setTimeout(() => setMinDelayDone(true), 2200);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!minDelayDone) return;
+    // Keep the splash until cafe metadata is available so we don't show fallback branding.
+    if (cafe || error) setSplash(false);
+  }, [minDelayDone, cafe, error]);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +99,7 @@ export default function CafeEntryPage() {
               <div className="text-3xl font-extrabold">Q</div>
             )}
           </div>
-          <div className="mt-4 text-4xl font-extrabold">{cafe?.name || "QRDine"}</div>
+          <div className="mt-4 text-4xl font-extrabold">{cafe?.name || ""}</div>
           <div className="mt-2 text-sm font-semibold text-white/80">Preparing your menu experience…</div>
           <div className="mt-6 rounded-full bg-white/20 p-1">
             <div className="h-2 w-2/3 rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-rose-400 shadow-lg shadow-orange-500/40 animate-glow" />

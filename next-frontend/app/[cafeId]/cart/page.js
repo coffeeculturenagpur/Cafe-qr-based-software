@@ -149,11 +149,12 @@ export default function CartPage() {
   const totalItems = cart.reduce((sum, x) => sum + x.qty, 0);
 
   const updateQty = (id, delta) => {
-    setCart((prev) =>
-      prev
-        .map((x) => (x._id === id ? { ...x, qty: x.qty + delta } : x))
-        .filter((x) => x.qty > 0)
-    );
+    setCart((prev) => {
+      const next = prev.map((x) => (x._id === id ? { ...x, qty: x.qty + delta } : x)).filter((x) => x.qty > 0);
+      // Write immediately to localStorage so returning to menu doesn't briefly clear cart.
+      if (hydrated && cafeId && tableNumber) writeCart(cafeId, tableNumber, next);
+      return next;
+    });
   };
 
   const placeOrder = async () => {

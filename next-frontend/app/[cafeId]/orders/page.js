@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { ArrowLeft, Wifi, Clock } from "lucide-react";
 import { apiFetch } from "../../../lib/api";
-import { isVenueOrderApiEnabled } from "../../../lib/venue";
 import { connectCafeSocket } from "../../../lib/socket";
 import { Button } from "../../../components/ui/Button";
 import { Card, CardContent } from "../../../components/ui/Card";
@@ -24,9 +23,11 @@ export default function OrdersPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const cafeId = params.cafeId;
-  const venueApi = isVenueOrderApiEnabled();
   const tableNumber = useMemo(() => searchParams.get("table"), [searchParams]);
   const tableToken = useMemo(() => searchParams.get("t") || "", [searchParams]);
+
+  const COFFEE_CULTURE_LOGO_URL =
+    "https://res.cloudinary.com/cafe-restaurants/image/upload/v1774080951/qrdine/godexhv2hm06cm1epkqo.jpg";
 
   const [visitId, setVisitId] = useState("");
   const [orders, setOrders] = useState([]);
@@ -55,9 +56,7 @@ export default function OrdersPage() {
     try {
       const q = new URLSearchParams({ visitId });
       const tokenParam = `t=${encodeURIComponent(tableToken)}`;
-      const path = venueApi
-        ? `/api/orders/venue/table/${tableNumber}?${q.toString()}&${tokenParam}`
-        : `/api/orders/${cafeId}/table/${tableNumber}?${q.toString()}&${tokenParam}`;
+      const path = `/api/orders/${cafeId}/table/${tableNumber}?${q.toString()}&${tokenParam}`;
       const data = await apiFetch(path);
       setOrders(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -163,21 +162,23 @@ export default function OrdersPage() {
       <main className="min-h-screen">
         <div className="sticky top-0 z-20 border-b border-white/60 bg-white/85 backdrop-blur">
           <div className="mx-auto flex w-full max-w-md items-center justify-between gap-2 px-4 py-3">
-            <Button variant="outline" className="h-9 w-9 shrink-0 rounded-full p-0" onClick={() => router.push(`/${cafeId}/menu?table=${tableNumber}&t=${encodeURIComponent(tableToken)}`)}>
-              <ArrowLeft size={18} className="text-slate-900" />
-            </Button>
+            <button
+              type="button"
+              onClick={() => router.push(`/${cafeId}/menu?table=${tableNumber}&t=${encodeURIComponent(tableToken)}`)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm"
+              aria-label="Back to menu"
+            >
+              <img
+                src={COFFEE_CULTURE_LOGO_URL}
+                alt="Coffee Culture logo"
+                className="h-full w-full object-cover"
+                loading="eager"
+                decoding="async"
+              />
+            </button>
             <div className="min-w-0 flex-1 text-center">
               <div className="text-xs text-slate-500">Table {tableNumber || "?"}</div>
               <div className="text-sm font-semibold text-slate-900">Your Orders</div>
-              <div className="mt-2 flex items-center justify-center">
-                <div className="h-10 w-10 rounded-full bg-white shadow ring-2 ring-white overflow-hidden">
-                  {cafeInfo?.logoUrl ? (
-                    <img src={cafeInfo.logoUrl} alt={cafeInfo?.name || "Cafe"} className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="h-full w-full bg-gradient-to-br from-orange-200 to-amber-200" />
-                  )}
-                </div>
-              </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <SoundControl />
