@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { apiFetch } from "../../../lib/api";
@@ -16,6 +17,7 @@ import { setCssVarsFromCafe } from "../../../lib/theme";
 import { formatIndianMobileInput, normalizeIndianMobile } from "../../../lib/phoneIn";
 import { useTableGuard } from "../../../lib/useTableGuard";
 import { motion, useReducedMotion } from "framer-motion";
+import { getCafeWithCache } from "../../../lib/cafeClient";
 
 function cartKey(cafeId, tableNumber) {
   return `cart:${cafeId}:table:${tableNumber}`;
@@ -114,7 +116,7 @@ export default function CartPage() {
     const loadCafe = async () => {
       if (!cafeId) return;
       try {
-        const data = await apiFetch(`/api/cafe/${cafeId}`);
+        const data = await getCafeWithCache(cafeId);
         if (!cancelled) setCafeInfo(data || null);
       } catch {
         if (!cancelled) setCafeInfo(null);
@@ -273,12 +275,19 @@ export default function CartPage() {
           <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 px-4 py-4">
             <button
               type="button"
-              className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/70 bg-white shadow-sm"
+              className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/70 bg-white shadow-sm"
               onClick={() => router.push(`/${cafeId}/menu?table=${tableNumber}&t=${encodeURIComponent(tableToken)}`)}
               aria-label="Back to menu"
             >
               {cafeInfo?.logoUrl ? (
-                <img src={cafeInfo.logoUrl} alt={cafeInfo?.name || "Cafe"} className="h-full w-full object-cover" />
+                <Image
+                  src={cafeInfo.logoUrl}
+                  alt={cafeInfo?.name || "Cafe"}
+                  fill
+                  unoptimized
+                  sizes="48px"
+                  className="object-cover"
+                />
               ) : (
                 <ArrowLeft size={18} className="text-slate-900" />
               )}

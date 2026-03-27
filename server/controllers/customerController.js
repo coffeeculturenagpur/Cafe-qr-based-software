@@ -29,12 +29,13 @@ exports.getFavorites = async (req, res) => {
     const normalized = normalizePhone(customer.phone);
     if (!normalized) return res.json({ items: [] });
 
-    const orders = await Order.find({
+    const filtered = await Order.find({
       cafeId: new mongoose.Types.ObjectId(cafeId),
+      phone: normalized,
       status: { $in: ["paid", "served"] },
-    }).lean();
-
-    const filtered = orders.filter((o) => normalizePhone(o.phone) === normalized);
+    })
+      .select("items")
+      .lean();
 
     const byKey = new Map();
     for (const o of filtered) {

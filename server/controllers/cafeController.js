@@ -6,7 +6,7 @@ const { canAccessCafe, forbiddenTenant } = require("../utils/tenant");
 
 exports.listCafes = async (req, res) => {
   try {
-    const cafes = await Cafe.find().sort({ createdAt: -1 });
+    const cafes = await Cafe.find().sort({ createdAt: -1 }).lean();
     return res.json(cafes);
   } catch (error) {
     return res.status(500).json({ message: "Server error", error });
@@ -15,7 +15,7 @@ exports.listCafes = async (req, res) => {
 
 exports.getCafeById = async (req, res) => {
   try {
-    const cafe = await Cafe.findById(req.params.id);
+    const cafe = await Cafe.findById(req.params.id).lean();
     if (!cafe) return res.status(404).json({ message: "Cafe not found" });
     return res.json(cafe);
   } catch (error) {

@@ -77,25 +77,42 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ message: "items[] is required" });
     }
 
+    const normalizedLines = items.map((line) => {
+      const menuItemId = line?.menuItemId;
+      const qty = Number(line?.qty);
+      return { menuItemId, qty };
+    });
+
+    for (const line of normalizedLines) {
+      if (!line.menuItemId) {
+        return res.status(400).json({ message: "Each item must include menuItemId" });
+      }
+      if (!line.qty || line.qty < 1) {
+        return res.status(400).json({ message: "Each item must have qty >= 1" });
+      }
+    }
+
+    const menuIds = normalizedLines.map((line) => line.menuItemId);
+    const menuDocs = await MenuItem.find({
+      _id: { $in: menuIds },
+      cafeId,
+      isAvailable: true,
+    })
+      .select("_id name price")
+      .lean();
+
+    const menuMap = new Map(menuDocs.map((doc) => [String(doc._id), doc]));
+    if (menuMap.size !== menuIds.length) {
+      return res.status(400).json({
+        message: "One or more items are unavailable or do not belong to this cafe",
+      });
+    }
+
     const resolvedItems = [];
     let lineSubtotal = 0;
 
-    for (const line of items) {
-      const menuItemId = line.menuItemId;
-      if (!menuItemId) {
-        return res.status(400).json({ message: "Each item must include menuItemId" });
-      }
-      const qty = Number(line.qty);
-      if (!qty || qty < 1) {
-        return res.status(400).json({ message: "Each item must have qty >= 1" });
-      }
-
-      const menuDoc = await MenuItem.findOne({
-        _id: menuItemId,
-        cafeId,
-        isAvailable: true,
-      }).lean();
-
+    for (const line of normalizedLines) {
+      const menuDoc = menuMap.get(String(line.menuItemId));
       if (!menuDoc) {
         return res.status(400).json({
           message: "One or more items are unavailable or do not belong to this cafe",
@@ -103,12 +120,12 @@ exports.createOrder = async (req, res) => {
       }
 
       const unitPrice = Number(menuDoc.price);
-      lineSubtotal += unitPrice * qty;
+      lineSubtotal += unitPrice * line.qty;
       resolvedItems.push({
         menuItemId: menuDoc._id,
         name: menuDoc.name,
         price: unitPrice,
-        qty,
+        qty: line.qty,
       });
     }
 
@@ -207,7 +224,7 @@ exports.listOrdersByCafe = async (req, res) => {
       }
     }
 
-    const orders = await Order.find(q).sort({ createdAt: -1 });
+    const orders = await Order.find(q).sort({ createdAt: -1 }).lean();
     return res.json(orders);
   } catch (error) {
     return res.status(500).json({ message: "Server error", error });
@@ -226,7 +243,7 @@ exports.listOrdersByTable = async (req, res) => {
     const q = { cafeId, tableNumber: Number(tableNumber) };
     const vid = typeof req.query.visitId === "string" ? req.query.visitId.trim() : "";
     if (vid) q.visitId = vid;
-    const orders = await Order.find(q).sort({ createdAt: -1 });
+    const orders = await Order.find(q).sort({ createdAt: -1 }).lean();
     return res.json(orders);
   } catch (error) {
     return res.status(500).json({ message: "Server error", error });
@@ -236,7 +253,7 @@ exports.listOrdersByTable = async (req, res) => {
 exports.getOrderById = async (req, res) => {
   try {
     const { cafeId, id } = req.params;
-    const order = await Order.findOne({ _id: id, cafeId });
+    const order = await Order.findOne({ _id: id, cafeId }).lean();
     if (!order) return res.status(404).json({ message: "Order not found" });
     return res.json(order);
   } catch (error) {

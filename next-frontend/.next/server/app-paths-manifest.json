@@ -1,22 +1,9 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
-  "/[cafeId]/order/[orderId]/page": "app/[cafeId]/order/[orderId]/page.js",
-  "/[cafeId]/menu/page": "app/[cafeId]/menu/page.js",
-  "/admin/history/page": "app/admin/history/page.js",
-  "/[cafeId]/orders/page": "app/[cafeId]/orders/page.js",
   "/[cafeId]/page": "app/[cafeId]/page.js",
-  "/admin/login/page": "app/admin/login/page.js",
-  "/chef/login/page": "app/chef/login/page.js",
   "/admin/menu/page": "app/admin/menu/page.js",
-  "/kitchen/page": "app/kitchen/page.js",
-  "/kitchen/history/page": "app/kitchen/history/page.js",
+  "/[cafeId]/menu/page": "app/[cafeId]/menu/page.js",
   "/login/page": "app/login/page.js",
-  "/super-admin/login/page": "app/super-admin/login/page.js",
+  "/icon.svg/route": "app/icon.svg/route.js",
   "/page": "app/page.js",
-  "/[cafeId]/cart/page": "app/[cafeId]/cart/page.js",
-  "/waiter/history/page": "app/waiter/history/page.js",
-  "/waiter/login/page": "app/waiter/login/page.js",
-  "/super-admin/page": "app/super-admin/page.js",
-  "/waiter/page": "app/waiter/page.js",
-  "/api/health/route": "app/api/health/route.js"
+  "/[cafeId]/cart/page": "app/[cafeId]/cart/page.js"
 }

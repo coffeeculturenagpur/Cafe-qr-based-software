@@ -25,7 +25,7 @@ exports.getAvailableItems = async (req, res) => {
     const cafeId = getCafeIdFromRequest(req);
     if (!cafeId) return res.status(400).json({ message: 'cafeId is required' });
 
-    const items = await MenuItem.find({ cafeId, isAvailable: true });
+    const items = await MenuItem.find({ cafeId, isAvailable: true }).sort({ category: 1, name: 1 }).lean();
     return res.json(items);
 }
 
@@ -35,7 +35,7 @@ exports.getItemsByCategory = async (req, res) => {
     const { category } = req.params;
     if (!cafeId) return res.status(400).json({ message: 'cafeId is required' });
 
-    const items = await MenuItem.find({ cafeId, category, isAvailable: true });
+    const items = await MenuItem.find({ cafeId, category, isAvailable: true }).sort({ name: 1 }).lean();
     return res.json(items);
 }
 
@@ -44,7 +44,7 @@ exports.getMenuByCafe = async (req, res) => {
     const cafeId = getCafeIdFromRequest(req);
     if (!cafeId) return res.status(400).json({ message: 'cafeId is required' });
 
-    const items = await MenuItem.find({ cafeId, isAvailable: true });
+    const items = await MenuItem.find({ cafeId, isAvailable: true }).sort({ category: 1, name: 1 }).lean();
     return res.json(items);
 };
 
@@ -99,7 +99,7 @@ exports.listAdminMenuItems = async (req, res) => {
         const cafeId = getCafeIdForWrite(req);
         if (!cafeId) return res.status(400).json({ message: 'cafeId is required' });
 
-        const items = await MenuItem.find({ cafeId }).sort({ createdAt: -1 });
+        const items = await MenuItem.find({ cafeId }).sort({ createdAt: -1 }).lean();
         return res.json(items);
     } catch (error) {
         return res.status(500).json({ message: 'Server error', error });

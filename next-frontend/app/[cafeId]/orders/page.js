@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { ArrowLeft, Wifi, Clock } from "lucide-react";
 import { apiFetch } from "../../../lib/api";
 import { connectCafeSocket } from "../../../lib/socket";
+import { setCssVarsFromCafe } from "../../../lib/theme";
 import { Button } from "../../../components/ui/Button";
 import { Card, CardContent } from "../../../components/ui/Card";
 import CustomerBottomNav from "../../../components/CustomerBottomNav";
@@ -15,6 +17,7 @@ import { maybeNotifyBrowser, playCustomerStatus, requestNotificationPermission }
 import StaffAlertBanner from "../../../components/StaffAlertBanner";
 import { AppLoading } from "../../../components/AppLoading";
 import { useTableGuard } from "../../../lib/useTableGuard";
+import { getCafeWithCache } from "../../../lib/cafeClient";
 
 const statusSteps = ["pending", "accepted", "preparing", "ready", "served", "paid", "rejected"];
 
@@ -49,7 +52,7 @@ export default function OrdersPage() {
     setVisitId(getOrCreateVisitId(cafeId, Number(tableNumber)));
   }, [cafeId, tableNumber]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!cafeId || !tableNumber || !visitId || tableGuard.status !== "ok") return;
     setLoading(true);
     setError("");
@@ -64,18 +67,18 @@ export default function OrdersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [cafeId, tableGuard.status, tableNumber, tableToken, visitId]);
 
   useEffect(() => {
     if (cafeId && tableNumber && visitId && tableGuard.status === "ok") load();
-  }, [cafeId, tableNumber, visitId, tableGuard.status]);
+  }, [cafeId, load, tableGuard.status, tableNumber, visitId]);
 
   useEffect(() => {
     let cancelled = false;
     const loadCafe = async () => {
       if (!cafeId) return;
       try {
-        const data = await apiFetch(`/api/cafe/${cafeId}`);
+        const data = await getCafeWithCache(cafeId);
         if (!cancelled) setCafeInfo(data || null);
       } catch {
         if (!cancelled) setCafeInfo(null);
@@ -86,6 +89,10 @@ export default function OrdersPage() {
       cancelled = true;
     };
   }, [cafeId]);
+
+  useEffect(() => {
+    if (cafeInfo) setCssVarsFromCafe(cafeInfo);
+  }, [cafeInfo]);
 
   useEffect(() => {
     if (!cafeId || !tableNumber || !visitId || tableGuard.status !== "ok") return;
@@ -165,15 +172,17 @@ export default function OrdersPage() {
             <button
               type="button"
               onClick={() => router.push(`/${cafeId}/menu?table=${tableNumber}&t=${encodeURIComponent(tableToken)}`)}
-              className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm"
+              className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm"
               aria-label="Back to menu"
             >
-              <img
+              <Image
                 src={COFFEE_CULTURE_LOGO_URL}
                 alt="Coffee Culture logo"
-                className="h-full w-full object-cover"
-                loading="eager"
-                decoding="async"
+                fill
+                unoptimized
+                sizes="36px"
+                priority
+                className="object-cover"
               />
             </button>
             <div className="min-w-0 flex-1 text-center">

@@ -26,9 +26,10 @@ const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const cloudBase = cloudName
   ? `https://res.cloudinary.com/${cloudName}/image/upload`
   : "https://res.cloudinary.com/demo/image/upload";
+const demoCloudBase = "https://res.cloudinary.com/demo/image/upload";
 
 const buildImage = (publicId, transforms = "f_auto,q_auto") =>
-  `${cloudBase}/${transforms}/${publicId}`;
+  `${publicId.startsWith("samples/") ? demoCloudBase : cloudBase}/${transforms}/${publicId}`;
 
 
 const moments = [

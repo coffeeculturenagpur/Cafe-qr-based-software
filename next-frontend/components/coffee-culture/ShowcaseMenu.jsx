@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Coffee, QrCode, AlertCircle, Loader2 } from "lucide-react";
@@ -200,13 +201,13 @@ export function ShowcaseMenu() {
                 >
                   <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-amber-100 to-stone-200">
                     {it.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <Image
                         src={it.image}
                         alt=""
-                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                        loading="lazy"
-                        decoding="async"
+                        fill
+                        unoptimized
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        className="object-cover transition duration-500 group-hover:scale-105"
                       />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center">

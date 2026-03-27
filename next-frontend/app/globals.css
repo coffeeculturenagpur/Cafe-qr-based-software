@@ -21,6 +21,21 @@
   --warning: 217 119 6;
   --danger: 220 38 38;
   --info: 2 132 199;
+  --menu-bg: #fffbf7;
+  --menu-bg-top: rgba(251, 146, 60, 0.28);
+  --menu-bg-side: rgba(244, 114, 182, 0.12);
+  --menu-bg-accent: rgba(52, 211, 153, 0.14);
+  --menu-bg-bottom: rgba(251, 191, 36, 0.1);
+  --menu-surface: rgba(255, 255, 255, 0.82);
+  --menu-surface-strong: rgba(255, 255, 255, 0.94);
+  --menu-border: rgba(255, 255, 255, 0.72);
+  --menu-border-strong: rgba(226, 232, 240, 0.92);
+  --menu-text: #0f172a;
+  --menu-muted: #64748b;
+  --menu-chip: rgba(248, 250, 252, 0.9);
+  --menu-card-shadow: 0 22px 60px -28px rgba(15, 23, 42, 0.22);
+  --menu-card-glow: color-mix(in srgb, var(--venue-primary, #f97316) 24%, transparent);
+  --menu-card-glow-soft: color-mix(in srgb, var(--venue-accent, #fbbf24) 18%, transparent);
 }
 
 html, body {
@@ -43,6 +58,47 @@ body {
 
 .bg-brand {
   background-color: rgb(var(--brand-primary));
+}
+
+.text-venue-primary {
+  color: var(--venue-primary, #f97316);
+}
+
+.text-venue-accent {
+  color: var(--venue-accent, #fbbf24);
+}
+
+.bg-venue-primary {
+  background-color: var(--venue-primary, #f97316);
+}
+
+.bg-venue-accent {
+  background-color: var(--venue-accent, #fbbf24);
+}
+
+.border-venue-primary {
+  border-color: var(--venue-primary, #f97316);
+}
+
+.border-venue-accent {
+  border-color: var(--venue-accent, #fbbf24);
+}
+
+.bg-venue-gradient {
+  background-image: linear-gradient(
+    to right,
+    var(--venue-primary, #f97316),
+    var(--venue-accent, #fbbf24)
+  );
+}
+
+.bg-venue-gradient-soft {
+  background-image: linear-gradient(
+    to bottom right,
+    color-mix(in srgb, var(--venue-accent, #fbbf24) 20%, white),
+    white,
+    color-mix(in srgb, var(--venue-primary, #f97316) 10%, white)
+  );
 }
 
 .font-display {
@@ -83,12 +139,95 @@ body {
 
 /* Richer backdrop for the customer menu flow */
 .menu-page-surface {
-  background-color: #fffbf7;
+  background-color: var(--menu-bg);
   background-image:
-    radial-gradient(ellipse 100% 60% at 50% -15%, rgba(251, 146, 60, 0.28), transparent 55%),
-    radial-gradient(circle at 0% 30%, rgba(244, 114, 182, 0.12), transparent 40%),
-    radial-gradient(circle at 100% 20%, rgba(52, 211, 153, 0.14), transparent 42%),
-    radial-gradient(circle at 50% 100%, rgba(251, 191, 36, 0.1), transparent 45%);
+    radial-gradient(ellipse 100% 60% at 50% -15%, var(--menu-bg-top), transparent 55%),
+    radial-gradient(circle at 0% 30%, var(--menu-bg-side), transparent 40%),
+    radial-gradient(circle at 100% 20%, var(--menu-bg-accent), transparent 42%),
+    radial-gradient(circle at 50% 100%, var(--menu-bg-bottom), transparent 45%);
+  color: var(--menu-text);
+}
+
+.menu-topbar {
+  border-color: color-mix(in srgb, var(--venue-primary, #f97316) 18%, var(--menu-border));
+  background: color-mix(in srgb, var(--menu-surface-strong) 92%, transparent);
+  box-shadow: 0 10px 28px -22px rgba(15, 23, 42, 0.45);
+}
+
+.menu-panel {
+  border: 1px solid var(--menu-border);
+  background: var(--menu-surface);
+  box-shadow: var(--menu-card-shadow);
+  backdrop-filter: blur(20px);
+}
+
+.menu-control {
+  border: 1px solid var(--menu-border-strong);
+  background: var(--menu-surface-strong);
+  box-shadow: 0 10px 30px -24px rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(20px);
+}
+
+.menu-control:hover {
+  background: color-mix(in srgb, var(--menu-surface-strong) 88%, white);
+}
+
+.menu-chip {
+  background: var(--menu-chip);
+  color: var(--menu-muted);
+  border: 1px solid var(--menu-border-strong);
+}
+
+.menu-text {
+  color: var(--menu-text);
+}
+
+.menu-muted {
+  color: var(--menu-muted);
+}
+
+.menu-glow-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--venue-primary, #f97316) 18%, var(--menu-border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--menu-surface-strong) 96%, transparent), var(--menu-surface)),
+    radial-gradient(circle at top right, var(--menu-card-glow-soft), transparent 38%);
+  box-shadow:
+    var(--menu-card-shadow),
+    0 0 0 1px color-mix(in srgb, var(--venue-primary, #f97316) 8%, transparent),
+    0 0 36px -18px var(--menu-card-glow),
+    0 0 52px -30px var(--menu-card-glow-soft);
+}
+
+.menu-glow-card::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--venue-accent, #fbbf24) 24%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--venue-primary, #f97316) 18%, transparent), transparent 24%);
+  opacity: 0.9;
+}
+
+.menu-glow-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.menu-card-image-fallback {
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--venue-accent, #fbbf24) 28%, transparent), transparent 42%),
+    linear-gradient(135deg, color-mix(in srgb, var(--venue-primary, #f97316) 24%, white), color-mix(in srgb, var(--venue-accent, #fbbf24) 16%, white));
+}
+
+.menu-favorites {
+  border: 1px solid color-mix(in srgb, var(--venue-accent, #fbbf24) 24%, var(--menu-border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--venue-accent, #fbbf24) 10%, var(--menu-surface)), var(--menu-surface-strong)),
+    radial-gradient(circle at top right, var(--menu-card-glow-soft), transparent 38%);
+  box-shadow: var(--menu-card-shadow);
 }
 
 .no-scrollbar::-webkit-scrollbar {

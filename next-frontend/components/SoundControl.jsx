@@ -27,33 +27,33 @@ export default function SoundControl({ className = "" }) {
 
   return (
     <div
-      className={`flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/90 px-1.5 py-1 shadow-sm backdrop-blur ${className}`}
+      className={`menu-control flex items-center gap-1 rounded-full px-1.5 py-1 ${className}`}
       role="group"
       aria-label="Sound and vibration"
     >
       <button
         type="button"
         onClick={toggleMute}
-        className="flex h-9 w-9 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100"
+        className="menu-muted flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/10"
         aria-pressed={!prefs.muted}
         aria-label={prefs.muted ? "Turn sound on" : "Mute sound"}
       >
         {prefs.muted ? (
-          <VolumeX size={18} strokeWidth={2.2} className="text-slate-700" />
+          <VolumeX size={18} strokeWidth={2.2} className="menu-text" />
         ) : (
-          <Volume2 size={18} strokeWidth={2.2} className="text-slate-700" />
+          <Volume2 size={18} strokeWidth={2.2} className="menu-text" />
         )}
       </button>
       <button
         type="button"
         onClick={toggleVibrate}
-        className={`flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-slate-100 ${
-          prefs.vibrate ? "text-slate-700" : "text-slate-400"
+        className={`flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/10 ${
+          prefs.vibrate ? "menu-text" : "menu-muted"
         }`}
         aria-pressed={prefs.vibrate}
         aria-label={prefs.vibrate ? "Vibration on" : "Vibration off"}
       >
-        <Smartphone size={18} strokeWidth={2.2} className={prefs.vibrate ? "text-slate-700" : "text-slate-400"} />
+        <Smartphone size={18} strokeWidth={2.2} className={prefs.vibrate ? "menu-text" : "menu-muted"} />
       </button>
     </div>
   );

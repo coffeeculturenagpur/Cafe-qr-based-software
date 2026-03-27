@@ -16,7 +16,7 @@ export function Button({
   };
   const variants = {
     primary:
-      "bg-gradient-to-r from-orange-500 via-amber-400 to-amber-300 text-white shadow-lg shadow-orange-500/25 hover:-translate-y-0.5 hover:brightness-105",
+      "bg-venue-gradient text-white shadow-lg hover:-translate-y-0.5 hover:brightness-105",
     outline:
       "border-2 border-slate-400 bg-white text-slate-900 shadow-sm hover:bg-slate-100",
     ghost: "text-slate-700 hover:bg-slate-100",

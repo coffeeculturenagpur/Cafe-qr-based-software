@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -280,7 +281,7 @@ export default function AdminMenuPage() {
   const isCafeAssetUploading =
     showcaseUploading || cafeLogoUploading || cafeBrandUploading || cafeUpiUploading || nonSmokingUploading;
 
-  const requireLogin = (redirectOnFail = true) => {
+  const requireLogin = useCallback((redirectOnFail = true) => {
     const token = getToken();
     if (!token) {
       if (redirectOnFail) window.location.href = "/admin/login";
@@ -291,9 +292,9 @@ export default function AdminMenuPage() {
       return false;
     }
     return true;
-  };
+  }, [role]);
 
-  const load = async (redirectOnFail = true) => {
+  const load = useCallback(async (redirectOnFail = true) => {
     if (!requireLogin(redirectOnFail)) return;
     setLoading(true);
     setError("");
@@ -305,9 +306,9 @@ export default function AdminMenuPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [listUrl, requireLogin]);
 
-  const loadAnalytics = async () => {
+  const loadAnalytics = useCallback(async () => {
     if (!requireLogin(false)) return;
     if (!cafeIdForAdmin) {
       setAnalytics(null);
@@ -368,9 +369,9 @@ export default function AdminMenuPage() {
     } finally {
       setAnalyticsLoading(false);
     }
-  };
+  }, [analyticsDays, cafeIdForAdmin, requireLogin]);
 
-  const loadTables = async () => {
+  const loadTables = useCallback(async () => {
     if (!requireLogin(false)) return;
     if (!tablesCafeId) {
       setTables([]);
@@ -387,7 +388,7 @@ export default function AdminMenuPage() {
     } finally {
       setTablesLoading(false);
     }
-  };
+  }, [requireLogin, role, tablesCafeId]);
 
   const generateTables = async () => {
     if (!requireLogin(false)) return;
@@ -522,7 +523,7 @@ export default function AdminMenuPage() {
     }
   };
 
-  const loadCafe = async () => {
+  const loadCafe = useCallback(async () => {
     if (!requireLogin(false)) return;
     if (!cafeIdForAdmin) {
       setCafeInfo(null);
@@ -580,9 +581,9 @@ export default function AdminMenuPage() {
     } finally {
       setCafeLoading(false);
     }
-  };
+  }, [cafeIdForAdmin, requireLogin, role]);
 
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     if (!tablesCafeId) return;
     if (!requireLogin(false)) return;
     setOrdersLoading(true);
@@ -598,7 +599,7 @@ export default function AdminMenuPage() {
     } finally {
       setOrdersLoading(false);
     }
-  };
+  }, [requireLogin, tablesCafeId]);
 
   const saveCafe = async (event) => {
     event.preventDefault();
@@ -983,7 +984,7 @@ export default function AdminMenuPage() {
     URL.revokeObjectURL(url);
   };
 
-  const loadStaff = async () => {
+  const loadStaff = useCallback(async () => {
     if (!requireLogin(false)) return;
     if (!staffCafeId) {
       setStaffList([]);
@@ -1000,7 +1001,7 @@ export default function AdminMenuPage() {
     } finally {
       setStaffListLoading(false);
     }
-  };
+  }, [requireLogin, role, staffCafeId]);
 
   const resetStaffPassword = async (id) => {
     const newPassword = window.prompt("Enter a new password for this account:");
@@ -1086,7 +1087,7 @@ export default function AdminMenuPage() {
   useEffect(() => {
     if (!authReady) return;
     load();
-  }, [authReady]);
+  }, [authReady, load]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -1101,28 +1102,27 @@ export default function AdminMenuPage() {
 
   useEffect(() => {
     if (tablesCafeId) loadTables();
-  }, [tablesCafeId]);
+  }, [loadTables, tablesCafeId]);
 
   useEffect(() => {
     if (cafeIdForAdmin) loadCafe();
-  }, [cafeIdForAdmin]);
+  }, [cafeIdForAdmin, loadCafe]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (cafeIdForAdmin) {
       loadAnalytics();
       return;
     }
     setAnalytics(null);
-  }, [cafeIdForAdmin, analyticsDays]);
+  }, [analyticsDays, cafeIdForAdmin, loadAnalytics]);
 
   useEffect(() => {
     if (staffCafeId) loadStaff();
-  }, [staffCafeId]);
+  }, [loadStaff, staffCafeId]);
 
   useEffect(() => {
     if (tablesCafeId) loadOrders();
-  }, [tablesCafeId]);
+  }, [loadOrders, tablesCafeId]);
 
   useEffect(() => {
     if (!authReady || !tablesCafeId) return;
@@ -1581,12 +1581,13 @@ export default function AdminMenuPage() {
                   {cafeForm.upiQrUrl ? (
                     <div className="mt-2 rounded-2xl border border-orange-100 bg-white p-3">
                       <div className="text-xs font-semibold text-slate-500">Preview</div>
-                      <img
+                      <Image
                         src={cafeForm.upiQrUrl}
                         alt="UPI QR"
+                        width={160}
+                        height={160}
+                        unoptimized
                         className="mt-2 h-40 w-40 rounded-xl object-cover"
-                        loading="lazy"
-                        decoding="async"
                       />
                     </div>
                   ) : null}
@@ -2052,12 +2053,13 @@ export default function AdminMenuPage() {
                         <span>{table.status || "free"}</span>
                       </div>
                       <div className="mt-3 flex items-center justify-center">
-                        <img
+                        <Image
                           src={qrUrl}
                           alt={`QR for table ${table.tableNumber}`}
+                          width={160}
+                          height={160}
+                          unoptimized
                           className="h-40 w-40 rounded-xl border border-orange-100 object-cover"
-                          loading="lazy"
-                          decoding="async"
                         />
                       </div>
                       <div className="mt-3 text-xs text-gray-500 break-all">{tableUrl}</div>
@@ -2261,12 +2263,13 @@ export default function AdminMenuPage() {
                               <td className="py-2 pr-3">{row.type || "-"}</td>
                               <td className="py-2 pr-3">
                                 {row.image ? (
-                                  <img
+                                  <Image
                                     src={row.image}
                                     alt={row.name || "Preview"}
+                                    width={40}
+                                    height={40}
+                                    unoptimized
                                     className="h-10 w-10 rounded-lg object-cover"
-                                    loading="lazy"
-                                    decoding="async"
                                   />
                                 ) : (
                                   "-"
@@ -2431,12 +2434,13 @@ export default function AdminMenuPage() {
                         <div className="mt-3 font-extrabold text-slate-900">INR {Number(it.price || 0).toFixed(2)}</div>
                         {it.image && (
                           <div className="mt-3">
-                            <img
+                            <Image
                               src={it.image}
                               alt={it.name}
+                              width={640}
+                              height={224}
+                              unoptimized
                               className="h-28 w-full rounded-xl object-cover border border-orange-100"
-                              loading="lazy"
-                              decoding="async"
                             />
                           </div>
                         )}

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { ArrowLeft, Wifi, Sparkles } from "lucide-react";
@@ -13,6 +14,8 @@ import SoundControl from "../../../../components/SoundControl";
 import { maybeNotifyBrowser, playCustomerStatus } from "../../../../lib/sounds";
 import { AppLoading } from "../../../../components/AppLoading";
 import { useTableGuard } from "../../../../lib/useTableGuard";
+import { setCssVarsFromCafe } from "../../../../lib/theme";
+import { getCafeWithCache } from "../../../../lib/cafeClient";
 
 const displaySteps = [
   { key: "accepted", label: "Order Accepted" },
@@ -107,7 +110,7 @@ export default function OrderStatusPage() {
     const loadCafe = async () => {
       if (!cafeId) return;
       try {
-        const data = await apiFetch(`/api/cafe/${cafeId}`);
+        const data = await getCafeWithCache(cafeId);
         if (!cancelled) setCafeInfo(data || null);
       } catch {
         if (!cancelled) setCafeInfo(null);
@@ -118,6 +121,10 @@ export default function OrderStatusPage() {
       cancelled = true;
     };
   }, [cafeId]);
+
+  useEffect(() => {
+    if (cafeInfo) setCssVarsFromCafe(cafeInfo);
+  }, [cafeInfo]);
 
   useEffect(() => {
     if (!order?.status) return;
@@ -173,9 +180,16 @@ export default function OrderStatusPage() {
             <div className="text-xs text-slate-500">Table {tableNumber || "?"}</div>
             <div className="text-sm font-semibold text-slate-900">Order Tracker</div>
             <div className="mt-2 flex items-center justify-center">
-              <div className="h-10 w-10 rounded-full bg-white shadow ring-2 ring-white overflow-hidden">
+              <div className="relative h-10 w-10 overflow-hidden rounded-full bg-white shadow ring-2 ring-white">
                 {cafeInfo?.logoUrl ? (
-                  <img src={cafeInfo.logoUrl} alt={cafeInfo?.name || "Cafe"} className="h-full w-full object-cover" />
+                  <Image
+                    src={cafeInfo.logoUrl}
+                    alt={cafeInfo?.name || "Cafe"}
+                    fill
+                    unoptimized
+                    sizes="40px"
+                    className="object-cover"
+                  />
                 ) : (
                   <div className="h-full w-full bg-gradient-to-br from-orange-200 to-amber-200" />
                 )}
@@ -229,7 +243,7 @@ export default function OrderStatusPage() {
                 <div className="text-sm font-semibold text-slate-900">
                   Order #{order._id.slice(-6)} - Table {order.tableNumber}
                 </div>
-                <div className="rounded-full bg-orange-50 border border-orange-200 px-3 py-1 text-xs font-semibold text-orange-700">
+                <div className="border-venue-accent text-venue-primary rounded-full border bg-white px-3 py-1 text-xs font-semibold">
                   {order.status}
                 </div>
               </div>
@@ -240,7 +254,7 @@ export default function OrderStatusPage() {
                   return (
                     <div
                       key={step.key}
-                      className={`h-2 rounded-full ${active ? "bg-orange-500" : "bg-slate-200"}`}
+                      className={`h-2 rounded-full ${active ? "bg-venue-primary" : "bg-slate-200"}`}
                     />
                   );
                 })}
@@ -253,7 +267,7 @@ export default function OrderStatusPage() {
                     <div key={step.key} className="flex items-center gap-2">
                       <div
                         className={`h-3 w-3 rounded-full border ${
-                          active ? "bg-orange-500 border-orange-500" : "border-slate-300"
+                          active ? "bg-venue-primary border-venue-primary" : "border-slate-300"
                         }`}
                       />
                       <span className={active ? "text-slate-900 font-semibold" : ""}>{step.label}</span>
@@ -321,7 +335,7 @@ export default function OrderStatusPage() {
                       }}
                       className={`flex-1 rounded-full border px-4 py-2 text-center text-sm font-semibold ${
                         paymentChoice === "cash"
-                          ? "border-orange-300 bg-gradient-to-r from-orange-500 to-amber-400 text-white"
+                          ? "border-venue-primary bg-venue-gradient text-white"
                           : "border-slate-300 text-slate-700"
                       }`}
                     >
@@ -335,7 +349,7 @@ export default function OrderStatusPage() {
                       }}
                       className={`flex-1 rounded-full border px-4 py-2 text-center text-sm font-semibold ${
                         paymentChoice === "upi"
-                          ? "border-orange-300 bg-gradient-to-r from-orange-500 to-amber-400 text-white"
+                          ? "border-venue-primary bg-venue-gradient text-white"
                           : "border-slate-300 text-slate-700"
                       }`}
                     >
@@ -352,9 +366,13 @@ export default function OrderStatusPage() {
                       <div className="text-xs font-semibold text-emerald-700">UPI QR</div>
                       {cafeInfo?.upiQrUrl ? (
                         <div className="mt-2 flex flex-col items-center gap-2">
-                          <img
+                          <Image
                             src={cafeInfo.upiQrUrl}
                             alt="UPI QR"
+                            width={176}
+                            height={176}
+                            unoptimized
+                            loading="lazy"
                             className="h-44 w-44 rounded-xl border border-emerald-200 object-cover"
                           />
                           <div className="text-[11px] text-emerald-700">

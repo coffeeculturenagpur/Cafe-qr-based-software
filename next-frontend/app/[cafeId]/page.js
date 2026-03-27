@@ -1,9 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { apiFetch } from "../../lib/api";
 import { setTableSession } from "../../lib/tableSession";
+import { getCafeWithCache } from "../../lib/cafeClient";
 
 export default function CafeEntryPage() {
   const router = useRouter();
@@ -37,7 +39,7 @@ export default function CafeEntryPage() {
     let cancelled = false;
     async function load() {
       try {
-        const data = await apiFetch(`/api/cafe/${cafeId}`);
+        const data = await getCafeWithCache(cafeId);
         if (!cancelled) setCafe(data);
       } catch (e) {
         if (!cancelled) setError(e.message || "Failed to load cafe");
@@ -88,12 +90,14 @@ export default function CafeEntryPage() {
         <div className="relative z-10 w-full max-w-sm text-center text-white">
           <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-3xl bg-white/15 shadow-2xl shadow-black/40 backdrop-blur">
             {cafe?.logoUrl ? (
-              <img
+              <Image
                 src={cafe.logoUrl}
                 alt={cafe?.name || "Cafe"}
-                className="h-20 w-20 rounded-2xl object-cover border border-white/30"
-                loading="lazy"
-                decoding="async"
+                width={80}
+                height={80}
+                unoptimized
+                priority
+                className="h-20 w-20 rounded-2xl border border-white/30 object-cover"
               />
             ) : (
               <div className="text-3xl font-extrabold">Q</div>

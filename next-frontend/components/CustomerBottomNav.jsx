@@ -62,7 +62,7 @@ export default function CustomerBottomNav({ cafeId, tableNumber, tableToken }) {
 
   return (
     <nav className="fixed bottom-0 left-1/2 z-30 w-[min(520px,calc(100%-1.5rem))] -translate-x-1/2 pb-4">
-      <div className="rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-slate-200/60 backdrop-blur">
+      <div className="menu-panel rounded-2xl">
         <div className="grid grid-cols-3 gap-1 p-2 text-xs font-semibold">
           {links.map((item) => {
             const Icon = item.icon;
@@ -72,13 +72,13 @@ export default function CustomerBottomNav({ cafeId, tableNumber, tableToken }) {
                 key={item.key}
                 href={item.href}
                 className={`flex flex-col items-center gap-1 rounded-xl px-2 py-2 transition ${
-                  active ? "bg-gradient-to-r from-orange-500 via-amber-400 to-amber-300 text-white shadow shadow-orange-500/30" : "text-slate-600 hover:bg-slate-100"
+                  active ? "bg-venue-gradient text-white shadow" : "text-slate-600 hover:bg-slate-100"
                 }`}
               >
                 <span className={`relative flex h-8 w-8 items-center justify-center rounded-full ${active ? "bg-white/20" : "bg-slate-100"}`}>
                   <Icon size={16} />
                   {item.key === "cart" && cartCount > 0 && (
-                    <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold leading-none text-white shadow">
+                    <span className="bg-venue-primary absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none text-white shadow">
                       {cartCount}
                     </span>
                   )}

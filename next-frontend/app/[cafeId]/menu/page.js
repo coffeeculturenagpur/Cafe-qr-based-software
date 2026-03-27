@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
@@ -17,6 +18,7 @@ import { useMounted } from "../../../lib/useMounted";
 import { AppLoading } from "../../../components/AppLoading";
 import { MenuFloatingCart } from "../../../components/menu/MenuFloatingCart";
 import { useTableGuard } from "../../../lib/useTableGuard";
+import { getCafeWithCache } from "../../../lib/cafeClient";
 
 function cartKey(cafeId, tableNumber) {
   return `cart:${cafeId}:table:${tableNumber}`;
@@ -96,7 +98,7 @@ export default function MenuPage() {
     let cancelled = false;
     async function loadCafe() {
       try {
-        const data = await apiFetch(`/api/cafe/${cafeId}`);
+        const data = await getCafeWithCache(cafeId);
         if (!cancelled) setCafe(data);
       } catch {
         if (!cancelled) setCafe(null);
@@ -240,20 +242,20 @@ export default function MenuPage() {
         </div>
       ) : (
         <main className="min-h-screen">
-          <div className="sticky top-0 z-20 border-b border-orange-100/50 bg-white/90 shadow-sm shadow-orange-100/30 backdrop-blur-xl">
+          <div className="menu-topbar sticky top-0 z-20 border-b backdrop-blur-xl">
             <div className="mx-auto flex w-full max-w-md items-center justify-between gap-2 px-4 py-3">
               <div className="min-w-0 flex-1 px-2">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-[10px] uppercase tracking-widest text-slate-400">Table</div>
-                    <div className="text-sm font-semibold text-slate-900">{tableNumber ? `Table ${tableNumber}` : "Table ?"}</div>
+                    <div className="menu-muted text-[10px] uppercase tracking-widest">Table</div>
+                    <div className="menu-text text-sm font-semibold">{tableNumber ? `Table ${tableNumber}` : "Table ?"}</div>
                   </div>
                   <div className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">
                     Live menu
                   </div>
                 </div>
-                <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                  <MapPin size={12} strokeWidth={2.2} className="text-slate-700" />
+                <div className="menu-muted mt-2 flex items-center gap-2 text-xs">
+                  <MapPin size={12} strokeWidth={2.2} className="menu-text" />
                   <span>{cafe?.address || "Freshly brewed, made to order."}</span>
                 </div>
               </div>
@@ -264,7 +266,7 @@ export default function MenuPage() {
           </div>
 
           <div className="mx-auto w-full max-w-md px-4 pt-3">
-            <div className="overflow-hidden rounded-3xl border border-white/70 bg-white/80 shadow-lg">
+            <div className="menu-panel overflow-hidden rounded-3xl">
               <div
                 className="relative h-40 w-full bg-slate-100"
                 style={{
@@ -276,14 +278,15 @@ export default function MenuPage() {
                 <div className="absolute inset-0 bg-gradient-to-br from-black/60 via-black/30 to-transparent" />
                 <div className="absolute bottom-4 left-4 right-4">
                   <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/30 bg-white/20">
+                    <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-white/30 bg-white/20">
                       {cafe?.logoUrl ? (
-                        <img
+                        <Image
                           src={cafe.logoUrl}
                           alt={cafe?.name || "Cafe"}
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                          decoding="async"
+                          fill
+                          unoptimized
+                          sizes="48px"
+                          className="object-cover"
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-xl font-bold text-white">Q</div>
@@ -309,15 +312,15 @@ export default function MenuPage() {
               </div>
               <div className="p-4">
                 <div className="relative">
-                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <Search size={16} className="menu-muted absolute left-3 top-1/2 -translate-y-1/2" />
                   <Input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Search dishes, categories, or ingredients"
-                    className="pl-9"
+                    className="menu-text border-[var(--menu-border-strong)] bg-[var(--menu-surface-strong)] pl-9 placeholder:!text-[color:var(--menu-muted)]"
                   />
                 </div>
-                <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+                <div className="menu-muted mt-3 flex items-center justify-between text-xs">
                   <div>{filteredItems.length} items</div>
                   <div className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold text-white">
                     Tap to add instantly
@@ -334,8 +337,8 @@ export default function MenuPage() {
                     key={category}
                     onClick={() => setSelectedCategory(category)}
                     className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition ${active
-                      ? "bg-orange-500 text-white shadow shadow-orange-500/30"
-                      : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300"
+                      ? "bg-venue-primary text-white shadow"
+                      : "menu-panel menu-muted hover:border-[color:var(--menu-border-strong)]"
                       }`}
                   >
                     {category}
@@ -346,21 +349,21 @@ export default function MenuPage() {
             <div className="mt-2 flex gap-2">
               <button
                 onClick={() => setTypeFilter("all")}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${typeFilter === "all" ? "bg-slate-900 text-white" : "bg-white text-slate-600 border border-slate-200"
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${typeFilter === "all" ? "bg-slate-900 text-white" : "menu-panel menu-muted"
                   }`}
               >
                 All
               </button>
               <button
                 onClick={() => setTypeFilter("veg")}
-                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition ${typeFilter === "veg" ? "bg-emerald-500 text-white" : "bg-white text-emerald-700 border border-emerald-200"
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition ${typeFilter === "veg" ? "bg-emerald-500 text-white" : "menu-panel text-emerald-700 border border-emerald-200"
                   }`}
               >
                 <Leaf size={12} /> Veg
               </button>
               <button
                 onClick={() => setTypeFilter("non-veg")}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${typeFilter === "non-veg" ? "bg-rose-500 text-white" : "bg-white text-rose-700 border border-rose-200"
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${typeFilter === "non-veg" ? "bg-rose-500 text-white" : "menu-panel text-rose-700 border border-rose-200"
                   }`}
               >
                 Non-veg
@@ -372,13 +375,13 @@ export default function MenuPage() {
                 initial={mounted && !reducedMotion ? { opacity: 0, y: 8 } : false}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: reducedMotion ? 0 : 0.35 }}
-                className="mt-5 rounded-3xl border border-amber-200/80 bg-gradient-to-br from-amber-50/95 via-white to-orange-50/90 p-4 shadow-card"
+                className="menu-favorites mt-5 rounded-3xl p-4"
               >
-                <div className="flex items-center gap-2 text-sm font-bold text-amber-900">
-                  <Heart className="text-orange-500" size={20} aria-hidden />
+                <div className="menu-text flex items-center gap-2 text-sm font-bold">
+                  <Heart className="text-venue-primary" size={20} aria-hidden />
                   Order again — your favorites
                 </div>
-                <p className="mt-1 text-xs text-amber-900/70">
+                <p className="menu-muted mt-1 text-xs">
                   Based on dishes you&apos;ve enjoyed here before. Larger cards for easy tapping.
                 </p>
                 <div className="mt-4 flex gap-3 overflow-x-auto pb-1 no-scrollbar">
@@ -388,23 +391,30 @@ export default function MenuPage() {
                     return (
                       <div
                         key={it._id}
-                        className="min-w-[220px] max-w-[260px] shrink-0 overflow-hidden rounded-3xl border border-white/80 bg-white p-0 shadow-md"
+                        className="menu-glow-card min-w-[220px] max-w-[260px] shrink-0 rounded-3xl p-0"
                       >
                         <div className="relative">
-                          <div className="h-44 w-full overflow-hidden bg-slate-100">
+                          <div className="relative h-44 w-full overflow-hidden bg-slate-100">
                             {it.image ? (
-                              <img src={it.image} alt="" className="h-44 w-full object-cover" loading="lazy" decoding="async" />
+                              <Image
+                                src={it.image}
+                                alt=""
+                                fill
+                                unoptimized
+                                sizes="(max-width: 768px) 220px, 260px"
+                                className="object-cover"
+                              />
                             ) : (
-                              <div className="flex h-full w-full items-center justify-center text-lg font-bold text-slate-300">
+                              <div className="menu-card-image-fallback flex h-full w-full items-center justify-center text-lg font-bold text-white/85">
                                 {it.name?.[0] || "?"}
                               </div>
                             )}
                           </div>
                         </div>
                         <div className="p-4">
-                          <div className="line-clamp-2 text-base font-semibold leading-tight text-slate-900">{it.name}</div>
-                          <div className="mt-1 text-[11px] text-slate-500">Ordered {totalQty}x total</div>
-                          <div className="mt-1 text-sm font-bold text-slate-900">INR {Number(it.price || 0).toFixed(0)}</div>
+                          <div className="menu-text line-clamp-2 text-base font-semibold leading-tight">{it.name}</div>
+                          <div className="menu-muted mt-1 text-[11px]">Ordered {totalQty}x total</div>
+                          <div className="menu-text mt-1 text-sm font-bold">INR {Number(it.price || 0).toFixed(0)}</div>
                         </div>
                         <div className="px-4 pb-4">
                           {!inCart ? (
@@ -436,7 +446,7 @@ export default function MenuPage() {
             )}
 
             {!loading && !error && favoritesState.status === "ok" && favoriteRows.length === 0 && (
-              <p className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white/50 px-4 py-3 text-center text-xs text-slate-500">
+              <p className="menu-panel menu-muted mt-4 rounded-2xl border border-dashed px-4 py-3 text-center text-xs">
                 Your favorites will appear here after your first completed order at this café.
               </p>
             )}
@@ -450,12 +460,12 @@ export default function MenuPage() {
             ) : (
               <div className="mt-4 space-y-4">
                 {specials.length > 0 && (
-                  <div className="rounded-3xl border border-orange-100 bg-gradient-to-br from-amber-50 via-white to-amber-50 p-4">
+                  <div className="bg-venue-gradient-soft border-venue-accent rounded-3xl border p-4">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-orange-700">
+                      <div className="text-venue-primary flex items-center gap-2 text-xs font-semibold">
                         <Star size={14} /> Today&apos;s Special
                       </div>
-                      <span className="rounded-full bg-orange-100 px-3 py-1 text-[11px] font-semibold text-orange-700">
+                      <span className="text-venue-primary border-venue-primary rounded-full border bg-white/80 px-3 py-1 text-[11px] font-semibold">
                         Limited
                       </span>
                     </div>
@@ -463,11 +473,11 @@ export default function MenuPage() {
                       {specials.map((it) => {
                         const inCart = cart.find((x) => x._id === it._id);
                         return (
-                          <div key={it._id} className="flex items-center justify-between gap-3 rounded-2xl border border-orange-100 bg-white p-3">
+                          <div key={it._id} className="menu-panel border-venue-accent flex items-center justify-between gap-3 rounded-2xl p-3">
                             <div>
-                              <div className="text-sm font-semibold text-slate-900">{it.name}</div>
-                              <div className="text-xs text-slate-500">{it.description || "Chef recommended today."}</div>
-                              <div className="mt-1 text-xs font-semibold text-orange-700">INR {Number(it.price || 0).toFixed(0)}</div>
+                              <div className="menu-text text-sm font-semibold">{it.name}</div>
+                              <div className="menu-muted text-xs">{it.description || "Chef recommended today."}</div>
+                              <div className="text-venue-primary mt-1 text-xs font-semibold">INR {Number(it.price || 0).toFixed(0)}</div>
                             </div>
                             {!inCart ? (
                               <Button onClick={() => add(it)} className="h-8 rounded-full px-4 text-xs">
@@ -491,7 +501,7 @@ export default function MenuPage() {
                   </div>
                 )}
                 {filteredItems.length === 0 ? (
-                  <div className="rounded-3xl border border-white/70 bg-white/80 p-6 text-center text-sm text-slate-600 shadow-sm">
+                  <div className="menu-panel menu-muted rounded-3xl p-6 text-center text-sm">
                     No dishes match your search. Try another keyword or category.
                   </div>
                 ) : (
@@ -508,19 +518,20 @@ export default function MenuPage() {
                       const isNonVeg = it.type === "non-veg";
                       return (
                         <motion.div key={it._id} variants={listItemVariants} transition={{ duration: 0.22 }}>
-                          <Card className="overflow-hidden rounded-[2rem] border border-orange-100/80 bg-white/95 shadow-[0_12px_30px_-22px_rgba(251,146,60,0.38)]">
+                          <Card className="menu-glow-card overflow-hidden rounded-[2rem]">
                             <CardContent className="!p-0">
-                              <div className="relative">
+                              <div className="relative h-44 w-full">
                                 {it.image ? (
-                                  <img
+                                  <Image
                                     src={it.image}
                                     alt={it.name}
-                                    className="h-44 w-full object-cover"
-                                    loading="lazy"
-                                    decoding="async"
+                                    fill
+                                    unoptimized
+                                    sizes="(max-width: 768px) 100vw, 448px"
+                                    className="object-cover"
                                   />
                                 ) : (
-                                  <div className="h-44 w-full bg-gradient-to-br from-orange-100 via-amber-50 to-orange-200" />
+                                  <div className="menu-card-image-fallback h-44 w-full" />
                                 )}
                                 {!available && (
                                   <div className="absolute inset-0 flex items-center justify-center bg-slate-900/55 text-xs font-semibold uppercase tracking-widest text-white">
@@ -539,7 +550,7 @@ export default function MenuPage() {
                                     </span>
                                   )}
                                   {it.isSpecial && (
-                                    <span className="rounded-full bg-white/95 px-3 py-1 text-[11px] font-bold text-orange-700 shadow">
+                                    <span className="text-venue-primary rounded-full bg-white/95 px-3 py-1 text-[11px] font-bold shadow">
                                       Chef pick
                                     </span>
                                   )}
@@ -548,17 +559,17 @@ export default function MenuPage() {
                               <div className="p-4">
                                 <div className="flex items-start justify-between gap-3">
                                   <div>
-                                    <div className="text-base font-semibold text-slate-900">{it.name}</div>
-                                    <div className="mt-1 text-xs text-slate-500">
+                                    <div className="menu-text text-base font-semibold">{it.name}</div>
+                                    <div className="menu-muted mt-1 text-xs">
                                       {it.description || "Fresh, handmade, and served warm."}
                                     </div>
                                   </div>
-                                  <div className="text-sm font-bold text-slate-900">INR {Number(it.price || 0).toFixed(0)}</div>
+                                  <div className="menu-text text-sm font-bold">INR {Number(it.price || 0).toFixed(0)}</div>
                                 </div>
 
                                 <div className="mt-3 flex items-center justify-between">
-                                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                                    <span className="rounded-full bg-slate-100 px-2 py-0.5">{it.category || "Menu"}</span>
+                                  <div className="menu-muted flex items-center gap-2 text-xs">
+                                    <span className="menu-chip rounded-full px-2 py-0.5">{it.category || "Menu"}</span>
                                     {available ? (
                                       <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">Available</span>
                                     ) : (
@@ -573,7 +584,7 @@ export default function MenuPage() {
                                         >
                                           <span className="text-base leading-none">-</span>
                                         </Button>
-                                        <div className="min-w-6 text-center text-xs font-semibold text-slate-900">{inCart.qty}</div>
+                                        <div className="menu-text min-w-6 text-center text-xs font-semibold">{inCart.qty}</div>
                                         <Button
                                           variant="outline"
                                           onClick={() => add(it)}
@@ -588,7 +599,7 @@ export default function MenuPage() {
                                   {!inCart ? (
                                     <Button
                                       onClick={() => add(it)}
-                                      className="h-9 rounded-full bg-gradient-to-r from-orange-500 via-orange-400 to-amber-400 px-4 text-xs font-bold shadow-[0_12px_24px_-14px_rgba(249,115,22,0.68)]"
+                                      className="h-9 rounded-full px-4 text-xs font-bold"
                                       disabled={!available}
                                     >
                                       <Plus size={16} className="text-white" /> Add
