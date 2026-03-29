@@ -1,44 +1,64 @@
 "use client";
 
 const CUSTOMER_SESSION_TTL_MS = 3 * 60 * 60 * 1000;
+const CUSTOMER_SESSION_KEY = "qrdine:customer-session";
 
-export function customerSessionKey(cafeId, tableNumber) {
+export function customerSessionKey() {
+  return CUSTOMER_SESSION_KEY;
+}
+
+function legacyCustomerSessionKey(cafeId, tableNumber) {
   return `customer:${cafeId}:table:${tableNumber}`;
 }
 
-export function getCustomerSession(cafeId, tableNumber) {
-  if (typeof window === "undefined" || !cafeId || tableNumber == null) return null;
-  try {
-    const raw = localStorage.getItem(customerSessionKey(cafeId, tableNumber));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return null;
+function parseCustomerSession(raw) {
+  if (!raw) return null;
+  const parsed = JSON.parse(raw);
+  if (!parsed || typeof parsed !== "object") return null;
 
-    const expiresAt = Number(parsed.expiresAt);
-    if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
-      localStorage.removeItem(customerSessionKey(cafeId, tableNumber));
-      return null;
+  const expiresAt = Number(parsed.expiresAt);
+  if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+    return null;
+  }
+
+  return {
+    name: parsed.name || "",
+    phone: parsed.phone || "",
+  };
+}
+
+export function getCustomerSession(cafeId, tableNumber) {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(customerSessionKey());
+    const parsed = parseCustomerSession(raw);
+    if (parsed) return parsed;
+    if (raw) localStorage.removeItem(customerSessionKey());
+
+    if (cafeId && tableNumber != null) {
+      const legacyKey = legacyCustomerSessionKey(cafeId, tableNumber);
+      const legacyRaw = localStorage.getItem(legacyKey);
+      const legacyParsed = parseCustomerSession(legacyRaw);
+      if (legacyParsed) {
+        setCustomerSession(legacyParsed);
+        localStorage.removeItem(legacyKey);
+        return legacyParsed;
+      }
+      if (legacyRaw) localStorage.removeItem(legacyKey);
     }
 
-    return {
-      cafeId: parsed.cafeId,
-      tableNumber: parsed.tableNumber,
-      name: parsed.name || "",
-      phone: parsed.phone || "",
-    };
+    return null;
   } catch {
     return null;
   }
 }
 
-export function setCustomerSession(cafeId, tableNumber, session) {
-  if (typeof window === "undefined" || !cafeId || tableNumber == null) return;
+export function setCustomerSession(session) {
+  if (typeof window === "undefined") return;
   try {
     localStorage.setItem(
-      customerSessionKey(cafeId, tableNumber),
+      customerSessionKey(),
       JSON.stringify({
-        cafeId,
-        tableNumber,
         name: session?.name || "",
         phone: session?.phone || "",
         expiresAt: Date.now() + CUSTOMER_SESSION_TTL_MS,
@@ -50,9 +70,12 @@ export function setCustomerSession(cafeId, tableNumber, session) {
 }
 
 export function clearCustomerSession(cafeId, tableNumber) {
-  if (typeof window === "undefined" || !cafeId || tableNumber == null) return;
+  if (typeof window === "undefined") return;
   try {
-    localStorage.removeItem(customerSessionKey(cafeId, tableNumber));
+    localStorage.removeItem(customerSessionKey());
+    if (cafeId && tableNumber != null) {
+      localStorage.removeItem(legacyCustomerSessionKey(cafeId, tableNumber));
+    }
   } catch {
     // ignore
   }

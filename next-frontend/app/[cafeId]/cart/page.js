@@ -127,7 +127,7 @@ export default function CartPage() {
   useEffect(() => {
     if (!cafeId || !tableNumber) return;
     if (!customerName && !customerPhone) return;
-    setCustomerSession(cafeId, tableNumber, {
+    setCustomerSession({
       name: customerName.trim(),
       phone: customerPhone.trim(),
     });

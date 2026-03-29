@@ -12,7 +12,6 @@ import { Card, CardContent } from "../../../components/ui/Card";
 import CustomerBottomNav from "../../../components/CustomerBottomNav";
 import { CustomerShell } from "../../../components/CustomerShell";
 import SoundControl from "../../../components/SoundControl";
-import { getOrCreateVisitId } from "../../../lib/visitSession";
 import { maybeNotifyBrowser, playCustomerStatus, requestNotificationPermission } from "../../../lib/sounds";
 import StaffAlertBanner from "../../../components/StaffAlertBanner";
 import { AppLoading } from "../../../components/AppLoading";
@@ -32,13 +31,13 @@ export default function OrdersPage() {
   const COFFEE_CULTURE_LOGO_URL =
     "https://res.cloudinary.com/cafe-restaurants/image/upload/v1774080951/qrdine/godexhv2hm06cm1epkqo.jpg";
 
-  const [visitId, setVisitId] = useState("");
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [socketState, setSocketState] = useState("disconnected");
   const [cafeInfo, setCafeInfo] = useState(null);
   const [statusToast, setStatusToast] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const tableGuard = useTableGuard({
     cafeId,
     tableNumber,
@@ -47,31 +46,39 @@ export default function OrdersPage() {
     redirectTo: (table, token) => `/${cafeId}/orders?table=${table}&t=${encodeURIComponent(token)}`,
   });
 
-  useEffect(() => {
-    if (!cafeId || !tableNumber) return;
-    setVisitId(getOrCreateVisitId(cafeId, Number(tableNumber)));
-  }, [cafeId, tableNumber]);
-
   const load = useCallback(async () => {
-    if (!cafeId || !tableNumber || !visitId || tableGuard.status !== "ok") return;
+    if (!cafeId || !tableNumber || tableGuard.status !== "ok") return;
     setLoading(true);
     setError("");
     try {
-      const q = new URLSearchParams({ visitId });
-      const tokenParam = `t=${encodeURIComponent(tableToken)}`;
-      const path = `/api/orders/${cafeId}/table/${tableNumber}?${q.toString()}&${tokenParam}`;
-      const data = await apiFetch(path);
+      const q = new URLSearchParams({
+        tableNumber: String(tableNumber),
+        t: tableToken,
+      });
+      const data = await apiFetch(`/api/orders/${cafeId}/mine?${q.toString()}`);
       setOrders(Array.isArray(data) ? data : []);
     } catch (e) {
       setError(e.message || "Failed to load orders");
     } finally {
       setLoading(false);
     }
-  }, [cafeId, tableGuard.status, tableNumber, tableToken, visitId]);
+  }, [cafeId, tableGuard.status, tableNumber, tableToken]);
 
   useEffect(() => {
-    if (cafeId && tableNumber && visitId && tableGuard.status === "ok") load();
-  }, [cafeId, load, tableGuard.status, tableNumber, visitId]);
+    if (cafeId && tableNumber && tableGuard.status === "ok") load();
+  }, [cafeId, load, tableGuard.status, tableNumber]);
+
+  useEffect(() => {
+    if (!cafeId || tableGuard.status !== "ok") return;
+    (async () => {
+      try {
+        const me = await apiFetch("/api/customers/me");
+        setCustomerPhone(String(me?.phone || "").trim());
+      } catch {
+        setCustomerPhone("");
+      }
+    })();
+  }, [cafeId, tableGuard.status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,7 +102,7 @@ export default function OrdersPage() {
   }, [cafeInfo]);
 
   useEffect(() => {
-    if (!cafeId || !tableNumber || !visitId || tableGuard.status !== "ok") return;
+    if (!cafeId || tableGuard.status !== "ok") return;
     const socket = connectCafeSocket(cafeId);
     setSocketState("connecting");
 
@@ -104,13 +111,12 @@ export default function OrdersPage() {
 
     const onOrder = (payload) => {
       if (!payload?._id) return;
-      if (String(payload.tableNumber) !== String(tableNumber)) return;
-      const pv = payload.visitId ? String(payload.visitId) : "";
-      if (pv && pv !== visitId) return;
+      if (!customerPhone) return;
+      if (String(payload.phone || "").trim() !== customerPhone) return;
       playCustomerStatus();
       setStatusToast(`Order ${String(payload._id).slice(-6)} · ${payload.status || "updated"}`);
       setTimeout(() => setStatusToast(""), 5000);
-      maybeNotifyBrowser("Order update", `Table ${tableNumber} — ${payload.status || ""}`);
+      maybeNotifyBrowser("Order update", `Table ${payload.tableNumber || "?"} - ${payload.status || ""}`);
       setOrders((prev) => {
         const idx = prev.findIndex((o) => o._id === payload._id);
         if (idx === -1) return [payload, ...prev];
@@ -132,13 +138,13 @@ export default function OrdersPage() {
       socket.off("ORDER_PAID", onOrder);
       socket.disconnect();
     };
-  }, [cafeId, tableNumber, visitId, tableGuard.status]);
+  }, [cafeId, customerPhone, tableGuard.status]);
 
   if (tableGuard.status === "checking") {
     return (
       <CustomerShell bottomInsetClass="pb-36">
         <div className="mx-auto w-full max-w-md px-4 pt-10">
-          <div className="text-center text-sm text-slate-600">Validating table link…</div>
+          <div className="text-center text-sm text-slate-600">Validating table link...</div>
         </div>
       </CustomerShell>
     );
@@ -189,129 +195,132 @@ export default function OrdersPage() {
           </div>
         </div>
 
-      <div className="mx-auto w-full max-w-md px-4 pt-2">
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <Wifi size={14} className={socketState === "connected" ? "text-emerald-600" : "text-slate-400"} />
-          <span>Live updates: <span className="font-semibold">{socketState}</span></span>
-          <button
-            type="button"
-            className="rounded-full border border-slate-200 bg-white px-2 py-1 font-semibold text-slate-600"
-            onClick={() => requestNotificationPermission()}
-          >
-            Alerts
-          </button>
-        </div>
-        {statusToast && (
-          <div className="mt-3">
-            <StaffAlertBanner message={statusToast} variant="success" />
+        <div className="mx-auto w-full max-w-md px-4 pt-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <Wifi size={14} className={socketState === "connected" ? "text-emerald-600" : "text-slate-400"} />
+            <span>Live updates: <span className="font-semibold">{socketState}</span></span>
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-2 py-1 font-semibold text-slate-600"
+              onClick={() => requestNotificationPermission()}
+            >
+              Alerts
+            </button>
           </div>
-        )}
-        {error && <div className="mt-4 text-sm font-semibold text-red-700">{error}</div>}
+          {statusToast && (
+            <div className="mt-3">
+              <StaffAlertBanner message={statusToast} variant="success" />
+            </div>
+          )}
+          {error && <div className="mt-4 text-sm font-semibold text-red-700">{error}</div>}
 
-        {loading ? (
-          <AppLoading label="Loading your orders" className="min-h-[30vh]" />
-        ) : orders.length === 0 ? (
-          <div className="mt-6 rounded-3xl border border-white/70 bg-white/80 p-6 text-center text-sm text-slate-600 shadow-sm">
-            No orders yet for this table.
-          </div>
-        ) : (
-          <div className="mt-4 space-y-4">
-            {orders.map((order) => {
-              const activeIndex = statusSteps.indexOf(order.status);
-              return (
-                <Card key={order._id} className="rounded-3xl border border-white/70 bg-white/85 shadow-sm">
-                  <CardContent>
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-semibold text-slate-900">Order #{order._id.slice(-6)}</div>
-                      <div className="rounded-full bg-orange-50 border border-orange-200 px-3 py-1 text-xs font-semibold text-orange-700">
-                        {order.status}
+          {loading ? (
+            <AppLoading label="Loading your orders" className="min-h-[30vh]" />
+          ) : orders.length === 0 ? (
+            <div className="mt-6 rounded-3xl border border-white/70 bg-white/80 p-6 text-center text-sm text-slate-600 shadow-sm">
+              No orders yet for this customer in this cafe.
+            </div>
+          ) : (
+            <div className="mt-4 space-y-4">
+              {orders.map((order) => {
+                const activeIndex = statusSteps.indexOf(order.status);
+                return (
+                  <Card key={order._id} className="rounded-3xl border border-white/70 bg-white/85 shadow-sm">
+                    <CardContent>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">Order #{order._id.slice(-6)}</div>
+                          <div className="text-[11px] text-slate-500">Table {order.tableNumber || "-"}</div>
+                        </div>
+                        <div className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700">
+                          {order.status}
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="mt-3 grid grid-cols-6 gap-1">
-                      {statusSteps.map((step, idx) => (
-                        <div
-                          key={step}
-                          className={`h-2 rounded-full ${idx <= activeIndex ? "bg-orange-500" : "bg-slate-200"}`}
-                        />
-                      ))}
-                    </div>
+                      <div className="mt-3 grid grid-cols-6 gap-1">
+                        {statusSteps.map((step, idx) => (
+                          <div
+                            key={step}
+                            className={`h-2 rounded-full ${idx <= activeIndex ? "bg-orange-500" : "bg-slate-200"}`}
+                          />
+                        ))}
+                      </div>
 
-                    <div className="mt-3 space-y-2 text-xs text-slate-600">
-                      {order.items.map((it, idx) => (
-                        <div key={idx} className="flex justify-between">
-                          <span>{it.name} x {it.qty}</span>
-                          <span>INR {(it.price * it.qty).toFixed(0)}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {(() => {
-                      const lineSum = order.items.reduce(
-                        (s, it) => s + Number(it.price || 0) * Number(it.qty || 0),
-                        0
-                      );
-                      const hasServerPricing =
-                        typeof order.subtotalAmount === "number" && typeof order.taxAmount === "number";
-                      const subtotal = hasServerPricing
-                        ? Number(order.subtotalAmount)
-                        : Number(order.totalAmount || lineSum);
-                      const discount =
-                        typeof order.discountAmount === "number" ? Number(order.discountAmount) : 0;
-                      const taxRate = Number(cafeInfo?.taxPercent || 0);
-                      const taxAmount = hasServerPricing
-                        ? Number(order.taxAmount)
-                        : subtotal * (taxRate / 100);
-                      const totalFinal = hasServerPricing
-                        ? Number(order.totalAmount || 0)
-                        : subtotal + taxAmount;
-                      return (
-                        <div className="mt-3 space-y-1 text-sm">
-                          <div className="flex justify-between text-slate-600">
-                            <span>Subtotal</span>
-                            <span>INR {subtotal.toFixed(0)}</span>
+                      <div className="mt-3 space-y-2 text-xs text-slate-600">
+                        {order.items.map((it, idx) => (
+                          <div key={idx} className="flex justify-between">
+                            <span>{it.name} x {it.qty}</span>
+                            <span>INR {(it.price * it.qty).toFixed(0)}</span>
                           </div>
-                          {discount > 0 && (
+                        ))}
+                      </div>
+
+                      {(() => {
+                        const lineSum = order.items.reduce(
+                          (s, it) => s + Number(it.price || 0) * Number(it.qty || 0),
+                          0
+                        );
+                        const hasServerPricing =
+                          typeof order.subtotalAmount === "number" && typeof order.taxAmount === "number";
+                        const subtotal = hasServerPricing
+                          ? Number(order.subtotalAmount)
+                          : Number(order.totalAmount || lineSum);
+                        const discount =
+                          typeof order.discountAmount === "number" ? Number(order.discountAmount) : 0;
+                        const taxRate = Number(cafeInfo?.taxPercent || 0);
+                        const taxAmount = hasServerPricing
+                          ? Number(order.taxAmount)
+                          : subtotal * (taxRate / 100);
+                        const totalFinal = hasServerPricing
+                          ? Number(order.totalAmount || 0)
+                          : subtotal + taxAmount;
+                        return (
+                          <div className="mt-3 space-y-1 text-sm">
                             <div className="flex justify-between text-slate-600">
-                              <span>Discount</span>
-                              <span>- INR {discount.toFixed(0)}</span>
+                              <span>Subtotal</span>
+                              <span>INR {subtotal.toFixed(0)}</span>
                             </div>
-                          )}
-                          <div className="flex justify-between text-slate-600">
-                            <span>Tax {!hasServerPricing && taxRate ? `(${taxRate}%)` : ""}</span>
-                            <span>INR {taxAmount.toFixed(0)}</span>
+                            {discount > 0 && (
+                              <div className="flex justify-between text-slate-600">
+                                <span>Discount</span>
+                                <span>- INR {discount.toFixed(0)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between text-slate-600">
+                              <span>Tax {!hasServerPricing && taxRate ? `(${taxRate}%)` : ""}</span>
+                              <span>INR {taxAmount.toFixed(0)}</span>
+                            </div>
+                            <div className="flex items-center justify-between font-semibold text-slate-900">
+                              <span>Total (incl. tax)</span>
+                              <span>INR {totalFinal.toFixed(0)}</span>
+                            </div>
                           </div>
-                          <div className="flex items-center justify-between font-semibold text-slate-900">
-                            <span>Total (incl. tax)</span>
-                            <span>INR {totalFinal.toFixed(0)}</span>
-                          </div>
-                        </div>
-                      );
-                    })()}
+                        );
+                      })()}
 
-                    <div className="mt-3">
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => router.push(`/${cafeId}/order/${order._id}?table=${tableNumber}&t=${encodeURIComponent(tableToken)}`)}
-                      >
-                        Track Order
-                      </Button>
-                    </div>
+                      <div className="mt-3">
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => router.push(`/${cafeId}/order/${order._id}?table=${tableNumber}&t=${encodeURIComponent(tableToken)}`)}
+                        >
+                          Track Order
+                        </Button>
+                      </div>
 
-                    <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                      <Clock size={12} />
-                      <span>Status refreshes live. No need to reload.</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
-      <CustomerBottomNav cafeId={cafeId} tableNumber={tableNumber} tableToken={tableToken} />
-    </main>
+                      <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                        <Clock size={12} />
+                        <span>Status refreshes live. No need to reload.</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <CustomerBottomNav cafeId={cafeId} tableNumber={tableNumber} tableToken={tableToken} />
+      </main>
     </CustomerShell>
   );
 }

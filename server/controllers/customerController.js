@@ -13,22 +13,30 @@ function customerSecret() {
   return process.env.CUSTOMER_JWT_SECRET || process.env.JWT_SECRET;
 }
 
+async function loadCurrentCustomer(req) {
+  const token = req.cookies?.[CUSTOMER_COOKIE_NAME];
+  if (!token) return { status: 401, message: "Not signed in" };
+
+  const verified = verifyCustomerToken({ req, token, secret: customerSecret() });
+  if (verified.status) return verified;
+
+  const customer = await Customer.findById(verified.payload.sub).lean();
+  if (!customer) return { status: 401, message: "Customer not found" };
+
+  return { customer };
+}
+
 /** Top menu items this customer has ordered at a cafe (by phone match on past orders). */
 exports.getFavorites = async (req, res) => {
   try {
-    const token = req.cookies?.[CUSTOMER_COOKIE_NAME];
-    if (!token) return res.status(401).json({ message: "Not signed in" });
-    const verified = verifyCustomerToken({ req, token, secret: customerSecret() });
-    if (verified.status) return res.status(verified.status).json({ message: verified.message });
-    const { payload } = verified;
-
     const cafeId = req.query.cafeId;
     if (!cafeId || !mongoose.Types.ObjectId.isValid(cafeId)) {
       return res.status(400).json({ message: "cafeId query parameter is required" });
     }
 
-    const customer = await Customer.findById(payload.sub).lean();
-    if (!customer) return res.status(401).json({ message: "Customer not found" });
+    const current = await loadCurrentCustomer(req);
+    if (current.status) return res.status(current.status).json({ message: current.message });
+    const { customer } = current;
     exports.signCustomerCookie(res, customer, req);
 
     const normalized = normalizePhone(customer.phone);
@@ -84,13 +92,9 @@ exports.getFavorites = async (req, res) => {
 
 exports.getMe = async (req, res) => {
   try {
-    const token = req.cookies?.[CUSTOMER_COOKIE_NAME];
-    if (!token) return res.status(401).json({ message: "Not signed in" });
-    const verified = verifyCustomerToken({ req, token, secret: customerSecret() });
-    if (verified.status) return res.status(verified.status).json({ message: verified.message });
-    const { payload } = verified;
-    const customer = await Customer.findById(payload.sub).lean();
-    if (!customer) return res.status(401).json({ message: "Customer not found" });
+    const current = await loadCurrentCustomer(req);
+    if (current.status) return res.status(current.status).json({ message: current.message });
+    const { customer } = current;
     exports.signCustomerCookie(res, customer, req);
     return res.json({
       id: String(customer._id),
@@ -115,6 +119,10 @@ exports.signCustomerCookie = (res, customerDoc, req) => {
     maxAge: CUSTOMER_COOKIE_MAX_AGE_MS,
     path: "/",
   });
+};
+
+exports.getCurrentCustomer = async (req) => {
+  return loadCurrentCustomer(req);
 };
 
 exports.upsertCustomerFromOrder = async ({ phone, name, tableNumber, cafeId }) => {

@@ -10,7 +10,9 @@ const { verifyTableToken } = require("../utils/tableToken");
 const {
   upsertCustomerFromOrder,
   signCustomerCookie,
+  getCurrentCustomer,
 } = require("../controllers/customerController");
+const { normalizePhone } = require("../utils/phone");
 
 exports.listOrdersByTableVenue = async (req, res) => {
   const cafeId = process.env.DEFAULT_CAFE_ID;
@@ -244,6 +246,37 @@ exports.listOrdersByTable = async (req, res) => {
     const vid = typeof req.query.visitId === "string" ? req.query.visitId.trim() : "";
     if (vid) q.visitId = vid;
     const orders = await Order.find(q).sort({ createdAt: -1 }).lean();
+    return res.json(orders);
+  } catch (error) {
+    return res.status(500).json({ message: "Server error", error });
+  }
+};
+
+exports.listMyOrdersInCafe = async (req, res) => {
+  try {
+    const { cafeId } = req.params;
+    const tableNumber = req.query.tableNumber || req.query.table || "";
+    const token = req.query.t || req.query.tableToken || "";
+
+    if (!cafeId) return res.status(400).json({ message: "cafeId is required" });
+    if (!tableNumber) return res.status(400).json({ message: "tableNumber is required" });
+    if (!verifyTableToken(cafeId, tableNumber, token)) {
+      return res.status(403).json({ message: "Invalid table token" });
+    }
+
+    const current = await getCurrentCustomer(req);
+    if (current.status) return res.status(current.status).json({ message: current.message });
+
+    const normalized = normalizePhone(current.customer?.phone);
+    if (!normalized) return res.json([]);
+
+    const orders = await Order.find({
+      cafeId,
+      phone: normalized,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
     return res.json(orders);
   } catch (error) {
     return res.status(500).json({ message: "Server error", error });

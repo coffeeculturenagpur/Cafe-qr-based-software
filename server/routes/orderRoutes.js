@@ -5,6 +5,7 @@ const { requireAuth, requireRole } = require("../middleware/auth");
 
 router.post("/", orderController.createOrder);
 router.get("/venue/table/:tableNumber", orderController.listOrdersByTableVenue);
+router.get("/:cafeId/mine", orderController.listMyOrdersInCafe);
 router.get("/:cafeId/table/:tableNumber", orderController.listOrdersByTable);
 router.get("/:cafeId/id/:id", orderController.getOrderById);
 router.get(
