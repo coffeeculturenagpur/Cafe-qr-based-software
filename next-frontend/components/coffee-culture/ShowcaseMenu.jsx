@@ -38,7 +38,12 @@ const FALLBACK_ITEMS = [
   },
 ];
 
-export function ShowcaseMenu() {
+/**
+ * @param {{ cafe: object | null, menu: unknown[] } | null | undefined} [prefetchedShowcase]
+ *        When provided by the parent (e.g. home page), skips duplicate /api/cafe + /api/menu fetches.
+ *        `null` means the parent is still loading bundled data.
+ */
+export function ShowcaseMenu({ prefetchedShowcase } = {}) {
   const mounted = useMounted();
   const reducedMotion = useReducedMotion();
   const cafeId = getShowcaseCafeId();
@@ -46,7 +51,7 @@ export function ShowcaseMenu() {
 
   const [items, setItems] = useState([]);
   const [cafeName, setCafeName] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => prefetchedShowcase === null);
   const [error, setError] = useState("");
   const [usedFallback, setUsedFallback] = useState(false);
 
@@ -69,10 +74,27 @@ export function ShowcaseMenu() {
   }, [cat, items.length]);
 
   useEffect(() => {
+    if (prefetchedShowcase !== undefined) {
+      if (prefetchedShowcase === null) {
+        setLoading(true);
+        setError("");
+        return;
+      }
+      const { cafe, menu } = prefetchedShowcase;
+      const list = Array.isArray(menu) ? menu : [];
+      setItems(list.length ? list : FALLBACK_ITEMS);
+      setUsedFallback(list.length === 0);
+      setCafeName(cafe?.name || "Our café");
+      setLoading(false);
+      setError("");
+      return;
+    }
+
     if (!cafeId || !hasApi) {
       setItems(FALLBACK_ITEMS);
       setUsedFallback(true);
       setCafeName("Coffee Culture");
+      setLoading(false);
       return;
     }
     let cancelled = false;
@@ -102,7 +124,7 @@ export function ShowcaseMenu() {
     return () => {
       cancelled = true;
     };
-  }, [cafeId, hasApi]);
+  }, [prefetchedShowcase, cafeId, hasApi]);
 
   const motionProps = (i) => {
     if (!mounted || reducedMotion) return { initial: false, animate: { opacity: 1 } };

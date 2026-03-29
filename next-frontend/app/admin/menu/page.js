@@ -14,6 +14,8 @@ import {
   Bar,
 } from "recharts";
 import { apiFetch, getApiBaseUrl } from "../../../lib/api";
+import { getEnvCustomerAppUrl } from "../../../lib/customerAppUrl";
+import { TableQrCode } from "../../../components/admin/TableQrCode";
 import { isOrderInLocalToday, ordersTodayQueryString } from "../../../lib/staffOrderRange";
 import Link from "next/link";
 import { authHeaders, getToken } from "../../../lib/auth";
@@ -189,7 +191,9 @@ export default function AdminMenuPage() {
     );
   }, [items, itemSearch]);
 
-  const [baseCustomerUrl, setBaseCustomerUrl] = useState("");
+  const [windowOrigin, setWindowOrigin] = useState(() =>
+    typeof window !== "undefined" ? window.location.origin : ""
+  );
   const [qrApiBaseUrl, setQrApiBaseUrl] = useState("");
 
   const [tables, setTables] = useState([]);
@@ -220,6 +224,7 @@ export default function AdminMenuPage() {
     logoUrl: "",
     brandImageUrl: "",
     upiQrUrl: "",
+    customerOrderBaseUrl: "",
     taxPercent: "",
     discountType: "percent",
     discountValue: "",
@@ -280,6 +285,14 @@ export default function AdminMenuPage() {
   const cafeIdForAdmin = tablesCafeId;
   const isCafeAssetUploading =
     showcaseUploading || cafeLogoUploading || cafeBrandUploading || cafeUpiUploading || nonSmokingUploading;
+
+  const effectiveCustomerBase = useMemo(() => {
+    const fromForm = (cafeForm.customerOrderBaseUrl || "").trim().replace(/\/$/, "");
+    if (fromForm) return fromForm;
+    const env = getEnvCustomerAppUrl();
+    if (env) return env;
+    return (windowOrigin || "").replace(/\/$/, "");
+  }, [cafeForm.customerOrderBaseUrl, windowOrigin]);
 
   const requireLogin = useCallback((redirectOnFail = true) => {
     const token = getToken();
@@ -541,6 +554,7 @@ export default function AdminMenuPage() {
         logoUrl: data?.logoUrl || "",
         brandImageUrl: data?.brandImageUrl || "",
         upiQrUrl: data?.upiQrUrl || "",
+        customerOrderBaseUrl: typeof data?.customerOrderBaseUrl === "string" ? data.customerOrderBaseUrl : "",
         taxPercent: typeof data?.taxPercent === "number" ? String(data.taxPercent) : "",
         discountType: data?.discountType || "percent",
         discountValue:
@@ -623,6 +637,7 @@ export default function AdminMenuPage() {
         logoUrl: cafeForm.logoUrl,
         brandImageUrl: cafeForm.brandImageUrl,
         upiQrUrl: cafeForm.upiQrUrl,
+        customerOrderBaseUrl: (cafeForm.customerOrderBaseUrl || "").trim(),
         taxPercent: cafeForm.taxPercent === "" ? 0 : Number(cafeForm.taxPercent),
         discountType: cafeForm.discountType || "percent",
         discountValue: cafeForm.discountValue === "" ? 0 : Number(cafeForm.discountValue),
@@ -1080,8 +1095,11 @@ export default function AdminMenuPage() {
   };
 
   useEffect(() => {
-    setBaseCustomerUrl(typeof window !== "undefined" ? window.location.origin : "");
     setQrApiBaseUrl(getApiBaseUrl() || "");
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") setWindowOrigin(window.location.origin);
   }, []);
 
   useEffect(() => {
@@ -1524,6 +1542,18 @@ export default function AdminMenuPage() {
                   onChange={(e) => setCafeForm((p) => ({ ...p, address: e.target.value }))}
                   placeholder="Address"
                 />
+                <div className="md:col-span-2 space-y-1">
+                  <div className="text-xs font-semibold text-slate-600">Public ordering URL (table QR links)</div>
+                  <Input
+                    value={cafeForm.customerOrderBaseUrl}
+                    onChange={(e) => setCafeForm((p) => ({ ...p, customerOrderBaseUrl: e.target.value }))}
+                    placeholder="https://order.yourdomain.com"
+                  />
+                  <p className="text-xs text-slate-500">
+                    Saved value overrides <code className="rounded bg-slate-100 px-1">NEXT_PUBLIC_CUSTOMER_APP_URL</code> and this
+                    page&apos;s origin. Use a stable custom domain so printed QRs keep working if you move hosting.
+                  </p>
+                </div>
                 <div className="space-y-2">
                   <Input
                     value={cafeForm.logoUrl}
@@ -1971,7 +2001,8 @@ export default function AdminMenuPage() {
               <div>
                 <div className="font-bold">Table QR codes</div>
                 <div className="text-sm text-gray-600 mt-1">
-                  Generate one QR per table. Each QR links to the cafe with its table number.
+                  One QR per table, generated in the browser (no per-table API image requests). Links use your public ordering URL
+                  under Cafe branding, then env, then this origin.
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -2027,14 +2058,14 @@ export default function AdminMenuPage() {
               <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {tables.map((table) => {
                   const tokenParam = table.tableToken ? `&t=${table.tableToken}` : "";
-                  const tableUrl = `${baseCustomerUrl}/${tablesCafeId}?table=${table.tableNumber}${tokenParam}`;
-                  const qrUrl = qrApiBaseUrl
+                  const tableUrl = `${effectiveCustomerBase}/${tablesCafeId}?table=${table.tableNumber}${tokenParam}`;
+                  const brandedPngUrl = qrApiBaseUrl
                     ? `${qrApiBaseUrl}/api/qr/table?cafeId=${encodeURIComponent(
                         tablesCafeId
                       )}&tableNumber=${encodeURIComponent(
                         table.tableNumber
-                      )}&baseUrl=${encodeURIComponent(baseCustomerUrl)}&size=260`
-                    : `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(tableUrl)}`;
+                      )}&baseUrl=${encodeURIComponent(effectiveCustomerBase)}&size=512`
+                    : "";
                   const statusLabel = table.status === "reserved" ? "Reserved" : "Free";
                   const statusClass =
                     table.status === "reserved"
@@ -2053,24 +2084,15 @@ export default function AdminMenuPage() {
                         <span>{table.status || "free"}</span>
                       </div>
                       <div className="mt-3 flex items-center justify-center">
-                        <Image
-                          src={qrUrl}
-                          alt={`QR for table ${table.tableNumber}`}
-                          width={160}
-                          height={160}
-                          unoptimized
-                          className="h-40 w-40 rounded-xl border border-orange-100 object-cover"
+                        <TableQrCode
+                          value={tableUrl}
+                          size={160}
+                          downloadFileName={`table-${table.tableNumber}-qr.png`}
+                          brandedPngUrl={brandedPngUrl}
                         />
                       </div>
                       <div className="mt-3 text-xs text-gray-500 break-all">{tableUrl}</div>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <a
-                          className="inline-flex items-center justify-center rounded-full border-2 border-slate-400 bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-100"
-                          href={qrUrl}
-                          download={`table-${table.tableNumber}-qr.png`}
-                        >
-                          Download QR
-                        </a>
                         <Button
                           variant="outline"
                           onClick={() => deleteTable(table._id, table.tableNumber)}

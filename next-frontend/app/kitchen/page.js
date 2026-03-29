@@ -18,6 +18,25 @@ import { Button } from "../../components/ui/Button";
 import { Card, CardContent } from "../../components/ui/Card";
 import { Input, Textarea } from "../../components/ui/Input";
 import { AppLoading } from "../../components/AppLoading";
+import { getCafeWithCache } from "../../lib/cafeClient";
+import { getMenuWithCache } from "../../lib/menuClient";
+import { ClipboardList, QrCode } from "lucide-react";
+
+function formatKitchenPhone(phone) {
+  const s = String(phone || "").trim();
+  if (!s) return "—";
+  if (s.startsWith("manual-table-")) return "Walk-in (no phone on file)";
+  return s;
+}
+
+function lineItemLabel(item) {
+  const name = String(item?.name || "").trim();
+  return name || "Menu item";
+}
+
+function lineItemTotal(item) {
+  return Number(item?.price || 0) * Number(item?.qty || 0);
+}
 
 function upsertOrder(list, order) {
   const idx = list.findIndex((x) => x._id === order._id);
@@ -89,6 +108,8 @@ export default function KitchenPage() {
   const [menuLoading, setMenuLoading] = useState(false);
   const [menuError, setMenuError] = useState("");
   const [tableFilter, setTableFilter] = useState("");
+  /** @type {"all" | "manual" | "qr"} */
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [editorOpen, setEditorOpen] = useState(false);
   const [menuSearch, setMenuSearch] = useState("");
   const [editorMode, setEditorMode] = useState("create");
@@ -111,19 +132,24 @@ export default function KitchenPage() {
   );
 
   const filteredOrders = useMemo(() => {
+    let list = orders;
     const query = tableFilter.trim().toLowerCase();
-    if (!query) return orders;
-    return orders.filter((order) => {
-      const tableValue = String(order?.tableNumber || "");
-      const customerValue = String(order?.customerName || "").toLowerCase();
-      const phoneValue = String(order?.phone || "").toLowerCase();
-      return (
-        tableValue.includes(query) ||
-        customerValue.includes(query) ||
-        phoneValue.includes(query)
-      );
-    });
-  }, [orders, tableFilter]);
+    if (query) {
+      list = list.filter((order) => {
+        const tableValue = String(order?.tableNumber || "");
+        const customerValue = String(order?.customerName || "").toLowerCase();
+        const phoneValue = String(order?.phone || "").toLowerCase();
+        return (
+          tableValue.includes(query) ||
+          customerValue.includes(query) ||
+          phoneValue.includes(query)
+        );
+      });
+    }
+    if (sourceFilter === "manual") list = list.filter((o) => o.source === "manual");
+    if (sourceFilter === "qr") list = list.filter((o) => o.source !== "manual");
+    return list;
+  }, [orders, tableFilter, sourceFilter]);
 
   const filteredMenuItems = useMemo(() => {
     const query = menuSearch.trim().toLowerCase();
@@ -159,39 +185,41 @@ export default function KitchenPage() {
     return { subtotal: lineSubtotal, discountAmount, taxAmount, total };
   }, [cafeInfo, menuById, orderDraft.items]);
 
-  const load = useCallback(async () => {
-    if (!cafeId) return;
-    setLoading(true);
-    setError("");
-    try {
-      const qs = ordersTodayQueryString();
-      const list = await apiFetch(`/api/orders/${cafeId}?${qs}`, { headers: { ...(token ? authHeaders() : {}) } });
-      const normalizedList = Array.isArray(list) ? list : [];
-      setTodayOrders(normalizedList);
-      setOrders(filterKitchenLiveOrders(normalizedList));
-    } catch (e) {
-      setError(e.message || "Failed to load orders");
-    } finally {
-      setLoading(false);
-    }
-  }, [cafeId, token]);
-
-  const loadMenuItems = useCallback(async () => {
-    if (!cafeId) {
-      setMenuItems([]);
-      return;
-    }
-    setMenuLoading(true);
-    setMenuError("");
-    try {
-      const data = await apiFetch(`/api/menu/${cafeId}`);
-      setMenuItems(Array.isArray(data) ? data : []);
-    } catch (e) {
-      setMenuError(e.message || "Failed to load menu items");
-    } finally {
-      setMenuLoading(false);
-    }
-  }, [cafeId]);
+  /** Orders always fetched; cafe + menu use session cache unless forceStatic (e.g. Refresh). */
+  const loadKitchenData = useCallback(
+    async (options = {}) => {
+      const { forceStatic = false } = options;
+      if (!cafeId) {
+        setMenuItems([]);
+        setCafeInfo(null);
+        return;
+      }
+      setLoading(true);
+      setMenuLoading(true);
+      setError("");
+      setMenuError("");
+      try {
+        const qs = ordersTodayQueryString();
+        const [list, cafeData, menuData] = await Promise.all([
+          apiFetch(`/api/orders/${cafeId}?${qs}`, { headers: { ...(token ? authHeaders() : {}) } }),
+          getCafeWithCache(cafeId, { force: forceStatic }),
+          getMenuWithCache(cafeId, { force: forceStatic }),
+        ]);
+        const normalizedList = Array.isArray(list) ? list : [];
+        setTodayOrders(normalizedList);
+        setOrders(filterKitchenLiveOrders(normalizedList));
+        setCafeInfo(cafeData || null);
+        setMenuItems(Array.isArray(menuData) ? menuData : []);
+      } catch (e) {
+        setError(e.message || "Failed to load kitchen data");
+        setMenuError(e.message || "Failed to load menu");
+      } finally {
+        setLoading(false);
+        setMenuLoading(false);
+      }
+    },
+    [cafeId, token]
+  );
 
   useEffect(() => {
     if (!authReady) return;
@@ -205,29 +233,8 @@ export default function KitchenPage() {
   }, [authReady, token, role]);
 
   useEffect(() => {
-    if (cafeId) load();
-  }, [cafeId, load]);
-
-  useEffect(() => {
-    if (cafeId) loadMenuItems();
-  }, [cafeId, loadMenuItems]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadCafe = async () => {
-      if (!cafeId) return;
-      try {
-        const data = await apiFetch(`/api/cafe/${cafeId}`);
-        if (!cancelled) setCafeInfo(data || null);
-      } catch {
-        if (!cancelled) setCafeInfo(null);
-      }
-    };
-    loadCafe();
-    return () => {
-      cancelled = true;
-    };
-  }, [cafeId]);
+    if (cafeId) loadKitchenData();
+  }, [cafeId, loadKitchenData]);
 
   useEffect(() => {
     if (!cafeId) return;
@@ -415,7 +422,7 @@ export default function KitchenPage() {
     <StaffShell
       staffNav={{
         variant: "kitchen",
-        onRefresh: load,
+        onRefresh: () => loadKitchenData({ forceStatic: true }),
         historyHref: "/kitchen/history",
       }}
       badge={
@@ -430,36 +437,41 @@ export default function KitchenPage() {
           <SoundControl />
         </>
       }
-      contentClassName="mx-auto w-full max-w-6xl"
+      contentClassName="mx-auto w-full max-w-7xl pb-10"
     >
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-            <div className="rounded-2xl border border-orange-100 bg-white/80 px-4 py-3 text-center shadow-sm">
-              <div className="text-xl font-bold text-slate-900">{stats.todayTotalOrders}</div>
-              <div className="text-xs uppercase tracking-wide text-slate-500">Today's Orders</div>
+          <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+            <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-br from-white to-orange-50/40 px-4 py-3 text-center shadow-sm ring-1 ring-orange-100/80">
+              <div className="text-xl font-bold tabular-nums text-slate-900">{stats.todayTotalOrders}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Today&apos;s orders</div>
             </div>
-            <div className="rounded-2xl border border-orange-100 bg-white/80 px-4 py-3 text-center shadow-sm">
-              <div className="text-xl font-bold text-slate-900">INR {stats.todayRevenue.toFixed(0)}</div>
-              <div className="text-xs uppercase tracking-wide text-slate-500">Today's Revenue</div>
+            <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-br from-white to-emerald-50/30 px-4 py-3 text-center shadow-sm ring-1 ring-emerald-100/60">
+              <div className="text-xl font-bold tabular-nums text-slate-900">₹{stats.todayRevenue.toFixed(0)}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Today&apos;s revenue</div>
             </div>
-            <div className="rounded-2xl border border-orange-100 bg-white/80 px-4 py-3 text-center shadow-sm">
-              <div className="text-xl font-bold text-slate-900">{stats.total}</div>
-              <div className="text-xs uppercase tracking-wide text-slate-500">Active</div>
+            <div className="rounded-2xl border border-orange-200/80 bg-white/90 px-4 py-3 text-center shadow-sm">
+              <div className="text-xl font-bold tabular-nums text-orange-900">{stats.total}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Active on board</div>
             </div>
-            <div className="rounded-2xl border border-orange-100 bg-white/80 px-4 py-3 text-center shadow-sm">
-              <div className="text-xl font-bold text-slate-900">{stats.queue}</div>
-              <div className="text-xs uppercase tracking-wide text-slate-500">Queue</div>
+            <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-center shadow-sm">
+              <div className="text-xl font-bold tabular-nums text-slate-900">{stats.queue}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Queue</div>
             </div>
-            <div className="rounded-2xl border border-orange-100 bg-white/80 px-4 py-3 text-center shadow-sm">
-              <div className="text-xl font-bold text-slate-900">{stats.preparing}</div>
-              <div className="text-xs uppercase tracking-wide text-slate-500">Preparing</div>
+            <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-center shadow-sm">
+              <div className="text-xl font-bold tabular-nums text-slate-900">{stats.preparing}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Preparing</div>
             </div>
           </div>
           <div className="min-w-0 text-sm text-slate-600">
             Socket: <span className="font-semibold">{socketState}</span>
           </div>
-          <Button variant="outline" onClick={load} disabled={!cafeId || loading} className="min-w-[110px]">
+          <Button
+            variant="outline"
+            onClick={() => loadKitchenData({ forceStatic: true })}
+            disabled={!cafeId || loading}
+            className="min-w-[110px]"
+          >
             Refresh
           </Button>
           <Button
@@ -481,18 +493,50 @@ export default function KitchenPage() {
           </Button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="w-full max-w-sm">
-            <Input
-              value={tableFilter}
-              onChange={(e) => setTableFilter(e.target.value)}
-              placeholder="Filter by table, customer, or phone"
-            />
+        <div className="rounded-2xl border border-slate-200/90 bg-white/70 p-4 shadow-sm ring-1 ring-slate-100/80 backdrop-blur-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="w-full max-w-md space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Search live queue</div>
+              <Input
+                value={tableFilter}
+                onChange={(e) => setTableFilter(e.target.value)}
+                placeholder="Table number, customer name, or phone"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Order source</div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { id: "all", label: "All" },
+                  { id: "manual", label: "Walk-in / manual", icon: ClipboardList },
+                  { id: "qr", label: "QR / guest", icon: QrCode },
+                ].map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setSourceFilter(id)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                      sourceFilter === id
+                        ? "border-orange-400 bg-orange-50 text-orange-900 shadow-sm"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    {Icon ? <Icon className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden /> : null}
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-600">
-            <span>Prepared = Ready.</span>
-            <span>Live queue updates arrive automatically.</span>
-            {tableFilter ? <span>Showing {filteredOrders.length} filtered orders.</span> : null}
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
+            <span>
+              <strong className="text-slate-800">Ready</strong> = hand off to service.
+            </span>
+            <span>Updates sync automatically.</span>
+            <span className="font-medium text-slate-800">
+              Showing {filteredOrders.length} of {orders.length} active
+              {tableFilter || sourceFilter !== "all" ? " (filtered)" : ""}.
+            </span>
           </div>
         </div>
 
@@ -507,7 +551,7 @@ export default function KitchenPage() {
                   onChange={(e) => setCafeIdOverride(e.target.value)}
                   placeholder="cafeId (ObjectId)"
                 />
-                <Button variant="outline" onClick={load} disabled={!cafeIdOverride || loading}>
+                <Button variant="outline" onClick={() => loadKitchenData()} disabled={!cafeIdOverride || loading}>
                   Load
                 </Button>
               </div>
@@ -520,55 +564,91 @@ export default function KitchenPage() {
         {error && <div className="text-red-700 font-semibold">{error}</div>}
         {menuError && <div className="text-red-700 font-semibold">{menuError}</div>}
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {filteredOrders.map((o) => (
-            <motion.div key={o._id} initial={motionInitial} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-              <Card className="border border-orange-100 shadow-lg">
-                <CardContent>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="font-extrabold text-slate-900">Table {o.tableNumber}</div>
-                      <div className="break-words text-sm text-gray-600">
-                        {o.customerName} - {o.phone}
+        <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
+          {filteredOrders.map((o) => {
+            const isManual = o.source === "manual";
+            return (
+            <motion.div key={o._id} initial={motionInitial} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="min-w-0">
+              <Card
+                className={`overflow-hidden border shadow-lg transition ${
+                  isManual
+                    ? "border-amber-200/90 ring-1 ring-amber-100/80"
+                    : "border-slate-200/90 ring-1 ring-slate-100/80"
+                }`}
+              >
+                <CardContent className="p-0">
+                  <div
+                    className={`flex flex-wrap items-start justify-between gap-3 border-b px-4 py-4 sm:px-5 ${
+                      isManual ? "border-amber-100 bg-amber-50/50" : "border-slate-100 bg-slate-50/40"
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-extrabold text-slate-900">Table {o.tableNumber}</span>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                            isManual ? "bg-amber-100 text-amber-900" : "bg-slate-200/80 text-slate-700"
+                          }`}
+                        >
+                          {isManual ? (
+                            <>
+                              <ClipboardList className="h-3 w-3" aria-hidden />
+                              Manual
+                            </>
+                          ) : (
+                            <>
+                              <QrCode className="h-3 w-3" aria-hidden />
+                              QR
+                            </>
+                          )}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 space-y-0.5 text-sm text-slate-600">
+                        <div className="break-words font-medium text-slate-800">{o.customerName || "Guest"}</div>
+                        <div className="text-xs text-slate-500">{formatKitchenPhone(o.phone)}</div>
                       </div>
                     </div>
-                    <div className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold uppercase text-orange-700">
+                    <div className="shrink-0 rounded-full border border-orange-200 bg-white px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-orange-800 shadow-sm">
                       {o.status === "baking" ? "preparing" : o.status}
                     </div>
                   </div>
 
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 font-semibold uppercase text-slate-600">
-                      {o.source === "manual" ? "manual order" : "qr order"}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 space-y-2 text-sm">
-                    {o.items.map((it, idx) => (
-                      <div key={idx} className="flex items-start justify-between gap-3">
-                        <span className="min-w-0 break-words">
-                          {it.name} x {it.qty}
+                  <div className="px-4 pb-3 pt-3 sm:px-5">
+                  <div className="max-h-[min(22rem,50vh)] space-y-2 overflow-y-auto overscroll-contain rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-sm [scrollbar-gutter:stable]">
+                    {(Array.isArray(o.items) ? o.items : []).map((it, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-start justify-between gap-3 border-b border-slate-100/90 pb-2 last:border-0 last:pb-0"
+                      >
+                        <span className="min-w-0 flex-1 break-words leading-snug text-slate-800">
+                          <span className="font-semibold">{lineItemLabel(it)}</span>
+                          <span className="text-slate-500"> × {Number(it?.qty || 0)}</span>
                         </span>
-                        <span className="shrink-0">INR {(it.price * it.qty).toFixed(2)}</span>
+                        <span className="shrink-0 tabular-nums font-medium text-slate-900">
+                          ₹{lineItemTotal(it).toFixed(2)}
+                        </span>
                       </div>
                     ))}
                   </div>
 
                   {o.paymentMode && (
-                    <div className="mt-2 text-xs font-semibold text-slate-600">
+                    <div className="mt-3 text-xs font-semibold text-slate-600">
                       Payment: {String(o.paymentMode).toUpperCase()}
                     </div>
                   )}
 
                   {o.notes ? (
-                    <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Order note</div>
-                      <div className="mt-1 break-words">{o.notes}</div>
+                    <div className="mt-3 max-h-40 overflow-y-auto rounded-xl border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-sm text-amber-950">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-800">Order note</div>
+                      <div className="mt-1 whitespace-pre-wrap break-words">{o.notes}</div>
                     </div>
                   ) : null}
 
                   {(() => {
-                    const lineSum = o.items.reduce((s, it) => s + Number(it.price || 0) * Number(it.qty || 0), 0);
+                    const lineSum = (Array.isArray(o.items) ? o.items : []).reduce(
+                      (s, it) => s + Number(it.price || 0) * Number(it.qty || 0),
+                      0
+                    );
                     const hasServerPricing = typeof o.subtotalAmount === "number" && typeof o.taxAmount === "number";
                     const subtotal = hasServerPricing ? Number(o.subtotalAmount) : Number(o.totalAmount || lineSum);
                     const discount = typeof o.discountAmount === "number" ? Number(o.discountAmount) : 0;
@@ -576,24 +656,24 @@ export default function KitchenPage() {
                     const taxAmount = hasServerPricing ? Number(o.taxAmount) : subtotal * (taxRate / 100);
                     const totalFinal = hasServerPricing ? Number(o.totalAmount || 0) : subtotal + taxAmount;
                     return (
-                      <div className="mt-3 space-y-1 text-sm">
+                      <div className="mt-3 space-y-1 rounded-xl border border-slate-100 bg-white/90 px-3 py-2 text-sm">
                         <div className="flex justify-between text-slate-600">
                           <span>Subtotal</span>
-                          <span>INR {subtotal.toFixed(2)}</span>
+                          <span className="tabular-nums">₹{subtotal.toFixed(2)}</span>
                         </div>
                         {discount > 0 && (
                           <div className="flex justify-between text-slate-600">
                             <span>Discount</span>
-                            <span>- INR {discount.toFixed(2)}</span>
+                            <span className="tabular-nums">− ₹{discount.toFixed(2)}</span>
                           </div>
                         )}
                         <div className="flex justify-between text-slate-600">
                           <span>Tax {!hasServerPricing && taxRate ? `(${taxRate}%)` : ""}</span>
-                          <span>INR {taxAmount.toFixed(2)}</span>
+                          <span className="tabular-nums">₹{taxAmount.toFixed(2)}</span>
                         </div>
-                        <div className="flex justify-between font-extrabold text-slate-900">
+                        <div className="flex justify-between border-t border-slate-100 pt-1 font-extrabold text-slate-900">
                           <span>Total</span>
-                          <span>INR {totalFinal.toFixed(2)}</span>
+                          <span className="tabular-nums">₹{totalFinal.toFixed(2)}</span>
                         </div>
                       </div>
                     );
@@ -642,35 +722,40 @@ export default function KitchenPage() {
                       Reject
                     </Button>
                   </div>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
-          ))}
+            );
+          })}
         </div>
 
         {!loading && cafeId && filteredOrders.length === 0 && (
-          <div className="text-gray-700">
-            {tableFilter ? "No orders match this filter." : "No orders yet."}
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-slate-700">
+            {tableFilter || sourceFilter !== "all"
+              ? "No orders match your search or source filter. Try clearing filters or refresh."
+              : "No active orders on the board yet."}
           </div>
         )}
       </div>
 
       {editorOpen ? (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35 backdrop-blur-[1px]">
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-[2px]">
           <button
             type="button"
             aria-label="Close order editor"
-            className="flex-1 cursor-default"
+            className="min-w-0 flex-1 cursor-default"
             onClick={closeOrderEditor}
           />
-          <div className="flex h-full w-full max-w-2xl flex-col border-l border-slate-200/80 bg-white shadow-[-12px_0_40px_-8px_rgba(15,23,42,0.18)]">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-              <div>
+          <div className="flex h-[100dvh] max-h-[100dvh] w-full min-w-0 max-w-2xl flex-col border-l border-slate-200/80 bg-white shadow-[-12px_0_40px_-8px_rgba(15,23,42,0.18)]">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+              <div className="min-w-0 pr-2">
                 <div className="font-bold text-slate-900">
                   {editorMode === "edit" ? "Edit order" : "Create manual order"}
                 </div>
                 <div className="mt-1 text-sm text-slate-600">
-                  Add walk-in orders by table or update the items already in the kitchen queue.
+                  Add walk-in orders by table or update the items already in the kitchen queue. Scroll the panel to see all
+                  lines and totals.
                 </div>
               </div>
               <Button variant="outline" onClick={closeOrderEditor} disabled={editorSaving}>
@@ -678,8 +763,8 @@ export default function KitchenPage() {
               </Button>
             </div>
 
-            <form className="flex min-h-0 flex-1 flex-col" onSubmit={submitOrderDraft}>
-              <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
+            <form className="flex min-h-0 flex-1 flex-col overflow-hidden" onSubmit={submitOrderDraft}>
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-5 py-5">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <Input
                     value={orderDraft.tableNumber}
@@ -751,6 +836,10 @@ export default function KitchenPage() {
                       onChange={(e) => setMenuSearch(e.target.value)}
                       placeholder="Search menu items by name, category, or description"
                     />
+                    <p className="mt-1.5 text-[11px] text-slate-500">
+                      Menu list is cached briefly (same as admin). Use <strong>Refresh</strong> above to reload menu and
+                      pricing from the server.
+                    </p>
                   </div>
 
                   {menuLoading ? <div className="mt-3 text-sm text-slate-500">Loading menu...</div> : null}
@@ -758,73 +847,98 @@ export default function KitchenPage() {
                     <div className="mt-3 text-sm text-slate-500">No menu items match this search.</div>
                   ) : null}
 
-                  <div className="mt-4 space-y-3">
+                  <div className="mt-4 max-h-[min(50vh,24rem)] space-y-4 overflow-y-auto overscroll-contain rounded-xl border border-slate-200/90 bg-white p-3 sm:max-h-[min(55vh,28rem)] sm:p-4">
                     {orderDraft.items.map((item, index) => {
                       const selectedItem = menuById.get(String(item.menuItemId));
+                      const qty = Math.max(1, Number(item.qty || 1));
+                      const lineTotal = Number(selectedItem?.price || 0) * qty;
+                      const optionsSource = menuSearch ? filteredMenuItems : menuItems;
                       return (
                         <div
                           key={`${item.menuItemId}-${index}`}
-                          className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-3 md:grid-cols-[minmax(0,1.5fr)_110px_auto]"
+                          className="rounded-2xl border border-slate-200 bg-slate-50/40 p-4 shadow-sm"
                         >
-                          <select
-                            value={item.menuItemId}
-                            onChange={(e) => updateDraftItem(index, { menuItemId: e.target.value })}
-                            className="w-full rounded-2xl border border-slate-200 bg-white/90 p-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-300/70"
-                          >
-                            {(menuSearch ? filteredMenuItems : menuItems).map((menuItem) => (
-                              <option key={menuItem._id} value={menuItem._id}>
-                                {menuItem.name} - {menuItem.category} - INR {Number(menuItem.price || 0).toFixed(0)}
-                              </option>
-                            ))}
-                            {selectedItem && !(menuSearch ? filteredMenuItems : menuItems).some((menuItem) => String(menuItem._id) === String(item.menuItemId)) ? (
-                              <option value={item.menuItemId}>
-                                {selectedItem.name} - {selectedItem.category} - INR {Number(selectedItem.price || 0).toFixed(0)}
-                              </option>
-                            ) : null}
-                          </select>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-11 w-11 shrink-0 rounded-full px-0"
-                              onClick={() =>
-                                updateDraftItem(index, {
-                                  qty: Math.max(1, Number(item.qty || 1) - 1),
-                                })
-                              }
-                            >
-                              -
-                            </Button>
-                            <Input
-                              value={item.qty}
-                              onChange={(e) =>
-                                updateDraftItem(index, {
-                                  qty: Math.max(1, Number(e.target.value || 1)),
-                                })
-                              }
-                              type="number"
-                              min="1"
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-11 w-11 shrink-0 rounded-full px-0"
-                              onClick={() =>
-                                updateDraftItem(index, {
-                                  qty: Math.max(1, Number(item.qty || 1) + 1),
-                                })
-                              }
-                            >
-                              +
-                            </Button>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="min-w-[88px] text-sm font-semibold text-slate-700">
-                              INR {(Number(selectedItem?.price || 0) * Number(item.qty || 0)).toFixed(2)}
+                          <div className="space-y-4">
+                            <div>
+                              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                Dish
+                              </label>
+                              <select
+                                value={item.menuItemId}
+                                onChange={(e) => updateDraftItem(index, { menuItemId: e.target.value })}
+                                className="w-full min-h-[48px] rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left text-sm text-slate-900 shadow-sm focus:border-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-200/80"
+                              >
+                                {optionsSource.map((menuItem) => (
+                                  <option key={menuItem._id} value={menuItem._id}>
+                                    {menuItem.name} · {menuItem.category} · ₹{Number(menuItem.price || 0).toFixed(0)}
+                                  </option>
+                                ))}
+                                {selectedItem &&
+                                !optionsSource.some((menuItem) => String(menuItem._id) === String(item.menuItemId)) ? (
+                                  <option value={item.menuItemId}>
+                                    {selectedItem.name} · {selectedItem.category} · ₹
+                                    {Number(selectedItem.price || 0).toFixed(0)}
+                                  </option>
+                                ) : null}
+                              </select>
                             </div>
-                            <Button type="button" variant="danger" onClick={() => removeDraftItem(index)}>
-                              Remove
-                            </Button>
+
+                            <div className="flex flex-col gap-4 border-t border-slate-200/80 pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                              <div className="w-full sm:w-auto">
+                                <span className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:mb-0 sm:mr-3 sm:inline">
+                                  Quantity
+                                </span>
+                                <div className="inline-flex h-12 items-stretch overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                                  <button
+                                    type="button"
+                                    className="flex w-12 shrink-0 items-center justify-center border-r border-slate-200 bg-slate-50 text-lg font-semibold text-slate-700 transition hover:bg-slate-100 active:bg-slate-200"
+                                    aria-label="Decrease quantity"
+                                    onClick={() =>
+                                      updateDraftItem(index, {
+                                        qty: Math.max(1, qty - 1),
+                                      })
+                                    }
+                                  >
+                                    −
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    inputMode="numeric"
+                                    value={qty}
+                                    onChange={(e) => {
+                                      const n = Number(e.target.value);
+                                      updateDraftItem(index, {
+                                        qty: Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1,
+                                      });
+                                    }}
+                                    className="w-[4.5rem] min-w-[4.5rem] shrink-0 border-0 bg-white px-1 text-center text-base font-semibold tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-orange-200/90"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="flex w-12 shrink-0 items-center justify-center border-l border-slate-200 bg-slate-50 text-lg font-semibold text-slate-700 transition hover:bg-slate-100 active:bg-slate-200"
+                                    aria-label="Increase quantity"
+                                    onClick={() =>
+                                      updateDraftItem(index, {
+                                        qty: qty + 1,
+                                      })
+                                    }
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                                <div className="text-sm sm:text-right">
+                                  <span className="text-slate-500">Line total </span>
+                                  <span className="font-bold tabular-nums text-slate-900">₹{lineTotal.toFixed(2)}</span>
+                                </div>
+                                <Button type="button" variant="danger" size="sm" onClick={() => removeDraftItem(index)}>
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       );
@@ -839,24 +953,24 @@ export default function KitchenPage() {
                 <div className="grid grid-cols-1 gap-2 rounded-2xl border border-orange-100 bg-orange-50/70 p-4 text-sm text-slate-700 sm:grid-cols-2 xl:grid-cols-4">
                   <div>
                     <div className="text-xs uppercase tracking-wide text-slate-500">Subtotal</div>
-                    <div className="mt-1 font-bold text-slate-900">INR {draftEstimate.subtotal.toFixed(2)}</div>
+                    <div className="mt-1 font-bold text-slate-900">₹{draftEstimate.subtotal.toFixed(2)}</div>
                   </div>
                   <div>
                     <div className="text-xs uppercase tracking-wide text-slate-500">Discount</div>
-                    <div className="mt-1 font-bold text-slate-900">INR {draftEstimate.discountAmount.toFixed(2)}</div>
+                    <div className="mt-1 font-bold text-slate-900">₹{draftEstimate.discountAmount.toFixed(2)}</div>
                   </div>
                   <div>
                     <div className="text-xs uppercase tracking-wide text-slate-500">Tax</div>
-                    <div className="mt-1 font-bold text-slate-900">INR {draftEstimate.taxAmount.toFixed(2)}</div>
+                    <div className="mt-1 font-bold text-slate-900">₹{draftEstimate.taxAmount.toFixed(2)}</div>
                   </div>
                   <div>
                     <div className="text-xs uppercase tracking-wide text-slate-500">Estimated total</div>
-                    <div className="mt-1 font-bold text-slate-900">INR {draftEstimate.total.toFixed(2)}</div>
+                    <div className="mt-1 font-bold text-slate-900">₹{draftEstimate.total.toFixed(2)}</div>
                   </div>
                 </div>
               </div>
 
-              <div className="border-t border-slate-200 px-5 py-4">
+              <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-4 shadow-[0_-8px_24px_-12px_rgba(15,23,42,0.12)]">
                 <div className="flex flex-wrap gap-2">
                   <Button type="submit" disabled={editorSaving || menuLoading || !menuItems.length}>
                     {editorSaving ? "Saving..." : editorMode === "edit" ? "Save order changes" : "Create manual order"}

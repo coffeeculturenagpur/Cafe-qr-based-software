@@ -132,15 +132,29 @@ export default function Home() {
       }))
     : nonSmokingGallery;
 
+  const [showcaseMenuPrefetch, setShowcaseMenuPrefetch] = useState(() => {
+    const baseUrl = getApiBaseUrl();
+    const cafeId = getShowcaseCafeId();
+    if (!baseUrl || !cafeId) return undefined;
+    return null;
+  });
+
   useEffect(() => {
     const baseUrl = getApiBaseUrl();
     const cafeId = getShowcaseCafeId();
-    if (!baseUrl || !cafeId) return;
+    if (!baseUrl || !cafeId) {
+      setShowcaseMenuPrefetch(undefined);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
-        const data = await apiFetch(`/api/cafe/${cafeId}`);
+        const [cafeData, menuData] = await Promise.all([
+          apiFetch(`/api/cafe/${cafeId}`),
+          apiFetch(`/api/menu/${cafeId}`),
+        ]);
         if (cancelled) return;
+        const data = cafeData;
         if (Array.isArray(data?.showcaseHighlights) && data.showcaseHighlights.length > 0) {
           const mapped = data.showcaseHighlights.map((it) => ({
             name: it?.name || "Signature",
@@ -167,8 +181,14 @@ export default function Home() {
           const mapped = data.showcaseNonSmokingShots.filter(Boolean);
           if (mapped.length) setNonSmokingShots(mapped);
         }
+        setShowcaseMenuPrefetch({
+          cafe: cafeData,
+          menu: Array.isArray(menuData) ? menuData : [],
+        });
       } catch {
-        // fallback to defaults
+        if (!cancelled) {
+          setShowcaseMenuPrefetch({ cafe: null, menu: [] });
+        }
       }
     })();
     return () => {
@@ -494,7 +514,7 @@ export default function Home() {
         </section>
 
 
-        <ShowcaseMenu />
+        <ShowcaseMenu prefetchedShowcase={showcaseMenuPrefetch} />
 
 
         <section id="community" className="scroll-mt-24 border-y border-stone-200/60 bg-white/60 py-20">

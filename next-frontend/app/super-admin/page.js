@@ -13,6 +13,7 @@ import {
   Bar,
 } from "recharts";
 import { apiFetch, getApiBaseUrl } from "../../lib/api";
+import { getEnvCustomerAppUrl } from "../../lib/customerAppUrl";
 import { authHeaders } from "../../lib/auth";
 import { useClientAuth } from "../../lib/useClientAuth";
 import { Button } from "../../components/ui/Button";
@@ -69,7 +70,15 @@ export default function SuperAdminPage() {
   const [adminUserError, setAdminUserError] = useState("");
   const [adminUserSuccess, setAdminUserSuccess] = useState("");
 
-  const [baseCustomerUrl, setBaseCustomerUrl] = useState("");
+  const [windowOrigin, setWindowOrigin] = useState(() =>
+    typeof window !== "undefined" ? window.location.origin : ""
+  );
+
+  const openCustomerBase = useMemo(() => {
+    const env = getEnvCustomerAppUrl();
+    if (env) return env;
+    return (windowOrigin || "").replace(/\/$/, "");
+  }, [windowOrigin]);
 
   const totals = useMemo(() => {
     const totalCafes = cafes.length;
@@ -84,7 +93,7 @@ export default function SuperAdminPage() {
       );
       const token = data?.token;
       if (!token) throw new Error("Missing table token");
-      const url = `${baseCustomerUrl}/${cafeId}?table=1&t=${encodeURIComponent(token)}`;
+      const url = `${openCustomerBase}/${cafeId}?table=1&t=${encodeURIComponent(token)}`;
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (e) {
       setError(e.message || "Failed to open customer URL");
@@ -190,7 +199,7 @@ export default function SuperAdminPage() {
       window.location.href = "/super-admin/login";
       return;
     }
-    setBaseCustomerUrl(typeof window !== "undefined" ? window.location.origin : "");
+    if (typeof window !== "undefined") setWindowOrigin(window.location.origin);
     load();
     loadOverview();
   }, [authReady, token, role]);
