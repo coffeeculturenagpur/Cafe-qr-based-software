@@ -355,9 +355,12 @@ export default function AdminMenuPage() {
         const dayKey = createdAt.toISOString().slice(0, 10);
         const revenue = Number(order?.totalAmount || 0);
         const status = String(order?.status || "unknown");
+        const isRejected = status.toLowerCase() === "rejected";
 
         const currentDay = byDayMap.get(dayKey) || { _id: dayKey, revenue: 0, orders: 0 };
-        currentDay.revenue += revenue;
+        if (!isRejected) {
+          currentDay.revenue += revenue;
+        }
         currentDay.orders += 1;
         byDayMap.set(dayKey, currentDay);
 

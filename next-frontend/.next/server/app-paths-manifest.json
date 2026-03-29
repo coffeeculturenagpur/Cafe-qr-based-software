@@ -1,3 +1,9 @@
 {
-  "/kitchen/page": "app/kitchen/page.js"
+  "/login/page": "app/login/page.js",
+  "/kitchen/page": "app/kitchen/page.js",
+  "/page": "app/page.js",
+  "/admin/history/page": "app/admin/history/page.js",
+  "/kitchen/history/page": "app/kitchen/history/page.js",
+  "/icon.svg/route": "app/icon.svg/route.js",
+  "/admin/menu/page": "app/admin/menu/page.js"
 }

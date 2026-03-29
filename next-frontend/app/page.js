@@ -127,9 +127,9 @@ export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const activeNonSmokingGallery = nonSmokingShots.length > 0
     ? nonSmokingShots.map((shot, index) => ({
-        src: shot,
-        alt: `Coffee Culture non-smoking area ${index + 1}`,
-      }))
+      src: shot,
+      alt: `Coffee Culture non-smoking area ${index + 1}`,
+    }))
     : nonSmokingGallery;
 
   const [showcaseMenuPrefetch, setShowcaseMenuPrefetch] = useState(() => {
@@ -339,7 +339,7 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-                              <div className="mt-6 flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-widest text-stone-500">
+                <div className="mt-6 flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-widest text-stone-500">
                   <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-4 py-2">
                     <Coffee className="h-4 w-4 text-amber-700" aria-hidden />
                     House roasted
@@ -629,7 +629,7 @@ export default function Home() {
               </span>
               <span className="font-display text-lg font-bold">Coffee Culture</span>
               <span className="text-stone-400">·</span>
-              <span>Powered by QRDine</span>
+              <span><a href="https://planitt.in" target="_blank" rel="noopener noreferrer">Powered by Planitt Solutions Pvt Lid</a></span>
             </div>
             <div className="flex flex-wrap justify-center gap-6 font-medium">
               <a href="#menu" className="hover:text-amber-800">

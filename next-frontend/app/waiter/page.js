@@ -59,7 +59,9 @@ export default function WaiterPage() {
     const ready = orders.filter((o) => o.status === "ready").length;
     const served = orders.filter((o) => o.status === "served").length;
     const todayTotalOrders = todayOrders.length;
-    const todayRevenue = todayOrders.reduce((sum, order) => sum + getOrderTotal(order, cafeInfo), 0);
+    const todayRevenue = todayOrders
+      .filter((o) => String(o?.status || "").toLowerCase() !== "rejected")
+      .reduce((sum, order) => sum + getOrderTotal(order, cafeInfo), 0);
     return { total, ready, served, todayTotalOrders, todayRevenue };
   }, [orders, todayOrders, cafeInfo]);
 

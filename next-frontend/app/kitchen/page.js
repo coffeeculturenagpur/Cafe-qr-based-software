@@ -122,7 +122,9 @@ export default function KitchenPage() {
     const queue = orders.filter((o) => ["pending", "accepted"].includes(o.status)).length;
     const preparing = orders.filter((o) => ["preparing", "baking"].includes(o.status)).length;
     const todayTotalOrders = todayOrders.length;
-    const todayRevenue = todayOrders.reduce((sum, order) => sum + getOrderTotal(order, cafeInfo), 0);
+    const todayRevenue = todayOrders
+      .filter((o) => String(o?.status || "").toLowerCase() !== "rejected")
+      .reduce((sum, order) => sum + getOrderTotal(order, cafeInfo), 0);
     return { total, queue, preparing, todayTotalOrders, todayRevenue };
   }, [orders, todayOrders, cafeInfo]);
 

@@ -66,7 +66,11 @@ exports.getAnalytics = async (req, res) => {
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-          revenue: { $sum: "$totalAmount" },
+          revenue: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "rejected"] }, 0, "$totalAmount"],
+            },
+          },
           orders: { $sum: 1 },
         },
       },

@@ -17,7 +17,11 @@ exports.getOverview = async (req, res) => {
         $group: {
           _id: "$cafeId",
           totalOrders: { $sum: 1 },
-          revenue: { $sum: "$totalAmount" },
+          revenue: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "rejected"] }, 0, "$totalAmount"],
+            },
+          },
           paidOrders: {
             $sum: {
               $cond: [{ $eq: ["$status", "paid"] }, 1, 0],
@@ -96,7 +100,11 @@ exports.getAnalytics = async (req, res) => {
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-          revenue: { $sum: "$totalAmount" },
+          revenue: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "rejected"] }, 0, "$totalAmount"],
+            },
+          },
           orders: { $sum: 1 },
         },
       },
