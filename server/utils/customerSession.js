@@ -19,10 +19,9 @@ function ipFingerprint(req, secret) {
 }
 
 function signCustomerToken({ customerId, req, secret }) {
-  const iph = ipFingerprint(req, secret);
-  if (!customerId || !secret || !iph) return "";
+  if (!customerId || !secret) return "";
   return jwt.sign(
-    { sub: String(customerId), aud: "customer", iph },
+    { sub: String(customerId), aud: "customer" },
     secret,
     { expiresIn: "3h" }
   );
@@ -32,10 +31,6 @@ function verifyCustomerToken({ req, token, secret }) {
   if (!secret) return { status: 500, message: "JWT secret not configured" };
   const payload = jwt.verify(token, secret);
   if (payload.aud !== "customer") return { status: 401, message: "Invalid session" };
-  const expectedIpHash = ipFingerprint(req, secret);
-  if (!expectedIpHash || payload.iph !== expectedIpHash) {
-    return { status: 401, message: "Session expired. Please place a fresh order from this device." };
-  }
   return { payload };
 }
 
