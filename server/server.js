@@ -75,6 +75,14 @@ app.use('/api/admin/cafe', adminCafeRoutes);
 app.use('/api/qr', qrRoutes);
 
 // Health check
+app.get('/healthz', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    uptimeSeconds: Math.round(process.uptime()),
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.get('/', (req, res) => {
   res.send('Restaurant backend running');
 });
