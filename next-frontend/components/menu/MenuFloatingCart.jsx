@@ -6,7 +6,7 @@ export function MenuFloatingCart({ cartCount, total, onViewCart }) {
   if (cartCount <= 0) return null;
 
   return (
-    <div className="fixed bottom-[7rem] left-1/2 z-30 w-[min(500px,calc(100%-1.5rem))] -translate-x-1/2">
+    <div className="fixed left-1/2 z-40 w-[min(500px,calc(100%-1.5rem))] -translate-x-1/2 bottom-[calc(6.75rem+env(safe-area-inset-bottom))] sm:bottom-[calc(7rem+env(safe-area-inset-bottom))]">
       <div className="menu-panel border-venue-accent rounded-2xl px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div>

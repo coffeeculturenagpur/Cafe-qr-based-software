@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -63,6 +64,63 @@ function formatDayLabel(value) {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
+function buildCustomerDirectory(orderList) {
+  const uniqueCustomers = new Map();
+
+  for (const order of Array.isArray(orderList) ? orderList : []) {
+    const name = String(order?.customerName || order?.name || "").trim();
+    const phone = String(order?.phone || "").trim();
+    if (!name && !phone) continue;
+
+    const phoneKey = phone.replace(/\D/g, "");
+    const nameKey = name.toLowerCase();
+    const key = phoneKey || (nameKey ? `name:${nameKey}` : "");
+    if (!key || uniqueCustomers.has(key)) continue;
+
+    uniqueCustomers.set(key, {
+      name: name || "Guest",
+      phone: phone || "-",
+    });
+  }
+
+  return Array.from(uniqueCustomers.values()).sort((a, b) => {
+    const phoneCompare = a.phone.localeCompare(b.phone, "en", { numeric: true, sensitivity: "base" });
+    if (phoneCompare !== 0) return phoneCompare;
+    return a.name.localeCompare(b.name, "en", { sensitivity: "base" });
+  });
+}
+
+function escapeCsvValue(value) {
+  const text = String(value ?? "");
+  if (/[",\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function SectionHeader({ title, description, actions = null, collapsed, onToggle }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <div className="font-bold text-slate-900">{title}</div>
+        {description ? <div className="mt-1 text-sm text-slate-600">{description}</div> : null}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {actions}
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70"
+        >
+          <ChevronDown className={`h-5 w-5 transition-transform duration-200 ${collapsed ? "-rotate-90" : "rotate-0"}`} />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function AdminMenuPage() {
@@ -256,10 +314,31 @@ export default function AdminMenuPage() {
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState("");
   const [ordersSocket, setOrdersSocket] = useState("disconnected");
+  const [customerDirectoryOpen, setCustomerDirectoryOpen] = useState(false);
+  const [customerDirectory, setCustomerDirectory] = useState([]);
+  const [customerDirectoryLoading, setCustomerDirectoryLoading] = useState(false);
+  const [customerDirectoryError, setCustomerDirectoryError] = useState("");
   const [analytics, setAnalytics] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState("");
   const [analyticsDays, setAnalyticsDays] = useState("30");
+  const [collapsedSections, setCollapsedSections] = useState({
+    pickCafe: true,
+    overview: true,
+    quickActions: true,
+    branding: true,
+    nonSmoking: true,
+    liveOrders: true,
+    tables: true,
+    staffCreate: true,
+    staffList: true,
+    menuCreate: true,
+    menuItems: true,
+  });
+
+  const toggleSection = useCallback((key) => {
+    setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
 
   const analyticsTotals = useMemo(() => {
     const byDay = Array.isArray(analytics?.byDay) ? analytics.byDay : [];
@@ -617,6 +696,82 @@ export default function AdminMenuPage() {
       setOrdersLoading(false);
     }
   }, [requireLogin, tablesCafeId]);
+
+  const loadCustomerDirectory = useCallback(async () => {
+    if (!tablesCafeId) return;
+    if (!requireLogin(false)) return;
+    setCustomerDirectoryLoading(true);
+    setCustomerDirectoryError("");
+    try {
+      const qs = new URLSearchParams({ scope: "history" }).toString();
+      const data = await apiFetch(`/api/orders/${tablesCafeId}?${qs}`, {
+        headers: { ...authHeaders() },
+      });
+      setCustomerDirectory(buildCustomerDirectory(data));
+    } catch (e) {
+      setCustomerDirectoryError(e.message || "Failed to load customers");
+    } finally {
+      setCustomerDirectoryLoading(false);
+    }
+  }, [requireLogin, tablesCafeId]);
+
+  const toggleCustomerDirectory = async () => {
+    if (customerDirectoryOpen) {
+      setCustomerDirectoryOpen(false);
+      return;
+    }
+    setCustomerDirectoryOpen(true);
+    if (customerDirectory.length === 0) {
+      await loadCustomerDirectory();
+    }
+  };
+
+  const exportCustomerDirectory = async () => {
+    if (!tablesCafeId || typeof window === "undefined") return;
+
+    let rows = customerDirectory;
+    if (rows.length === 0) {
+      if (!requireLogin(false)) return;
+      setCustomerDirectoryLoading(true);
+      setCustomerDirectoryError("");
+      try {
+        const qs = new URLSearchParams({ scope: "history" }).toString();
+        const data = await apiFetch(`/api/orders/${tablesCafeId}?${qs}`, {
+          headers: { ...authHeaders() },
+        });
+        rows = buildCustomerDirectory(data);
+        setCustomerDirectory(rows);
+        setCustomerDirectoryOpen(true);
+      } catch (e) {
+        setCustomerDirectoryError(e.message || "Failed to export customers");
+        return;
+      } finally {
+        setCustomerDirectoryLoading(false);
+      }
+    }
+
+    if (rows.length === 0) {
+      setCustomerDirectoryError("No customer data available to export yet.");
+      return;
+    }
+
+    const header = ["Customer Name", "Mobile Number"];
+    const csvLines = [
+      header.map(escapeCsvValue).join(","),
+      ...rows.map((row) => [row.name, row.phone].map(escapeCsvValue).join(",")),
+    ];
+    const csvContent = `\uFEFF${csvLines.join("\r\n")}`;
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `customers-${tablesCafeId}-${dateStamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
 
   const saveCafe = async (event) => {
     event.preventDefault();
@@ -1163,6 +1318,10 @@ export default function AdminMenuPage() {
         copy[idx] = payload;
         return copy;
       });
+      setCustomerDirectory((prev) => {
+        if (!customerDirectoryOpen) return prev;
+        return buildCustomerDirectory([payload, ...prev]);
+      });
     };
 
     socket.on("NEW_ORDER", onOrder);
@@ -1177,7 +1336,7 @@ export default function AdminMenuPage() {
       socket.off("ORDER_PAID", onOrder);
       socket.disconnect();
     };
-  }, [authReady, tablesCafeId]);
+  }, [authReady, customerDirectoryOpen, tablesCafeId]);
 
   const createItem = async (e) => {
     e.preventDefault();
@@ -1362,12 +1521,18 @@ export default function AdminMenuPage() {
         {role === "super_admin" && (
           <Card id="admin-pick-cafe" className="border border-orange-100 shadow-xl">
             <CardContent>
-              <div className="font-bold">Super Admin: choose a cafeId</div>
-              <div className="text-sm text-gray-600 mt-1">Provide a cafeId to scope listing and writes.</div>
-              <div className="mt-3 flex gap-2">
-                <Input value={adminCafeId} onChange={(e) => setAdminCafeId(e.target.value)} placeholder="cafeId (ObjectId)" />
-                <Button variant="outline" onClick={load} disabled={loading}>Load</Button>
-              </div>
+              <SectionHeader
+                title="Super Admin: choose a cafeId"
+                description="Provide a cafeId to scope listing and writes."
+                collapsed={collapsedSections.pickCafe}
+                onToggle={() => toggleSection("pickCafe")}
+              />
+              {!collapsedSections.pickCafe && (
+                <div className="mt-4 flex gap-2">
+                  <Input value={adminCafeId} onChange={(e) => setAdminCafeId(e.target.value)} placeholder="cafeId (ObjectId)" />
+                  <Button variant="outline" onClick={load} disabled={loading}>Load</Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -1375,165 +1540,179 @@ export default function AdminMenuPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_0.7fr]">
           <Card id="admin-overview" className="border border-orange-100 shadow-xl">
             <CardContent>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="font-bold text-slate-900">Business overview</div>
-                  <div className="mt-1 text-sm text-slate-600">
-                    Revenue and order trends for the last {analytics?.rangeDays || Number(analyticsDays)} days.
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={analyticsDays}
-                    onChange={(e) => setAnalyticsDays(e.target.value)}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
-                  >
-                    <option value="7">Last 7 days</option>
-                    <option value="30">Last 30 days</option>
-                    <option value="90">Last 90 days</option>
-                  </select>
-                  <Button variant="outline" onClick={loadAnalytics} disabled={analyticsLoading || !cafeIdForAdmin}>
-                    Refresh
-                  </Button>
-                </div>
-              </div>
+              <SectionHeader
+                title="Business overview"
+                description={`Revenue and order trends for the last ${analytics?.rangeDays || Number(analyticsDays)} days.`}
+                actions={(
+                  <>
+                    <select
+                      value={analyticsDays}
+                      onChange={(e) => setAnalyticsDays(e.target.value)}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                    >
+                      <option value="7">Last 7 days</option>
+                      <option value="30">Last 30 days</option>
+                      <option value="90">Last 90 days</option>
+                    </select>
+                    <Button variant="outline" onClick={loadAnalytics} disabled={analyticsLoading || !cafeIdForAdmin}>
+                      Refresh
+                    </Button>
+                  </>
+                )}
+                collapsed={collapsedSections.overview}
+                onToggle={() => toggleSection("overview")}
+              />
 
-              {analyticsError && <div className="mt-3 text-red-700 font-semibold">{analyticsError}</div>}
+              {!collapsedSections.overview && (
+                <>
+                  {analyticsError && <div className="mt-3 text-red-700 font-semibold">{analyticsError}</div>}
 
-              {!cafeIdForAdmin ? (
-                <div className="mt-6 text-sm text-slate-600">Select a cafe to load revenue analytics.</div>
-              ) : analyticsLoading ? (
-                <div className="mt-6 text-sm text-slate-600">Loading analytics...</div>
-              ) : !analytics?.byDay?.length && !analytics?.statusBreakdown?.length ? (
-                <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-600">
-                  No orders were found in this date range, so revenue and order charts are empty.
-                </div>
-              ) : (
-                <div className="mt-6 space-y-6">
-                  <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                    <div className="rounded-2xl border border-orange-100 bg-white/90 p-4">
-                      <div className="text-xs uppercase tracking-wide text-slate-500">Paid revenue</div>
-                      <div className="mt-2 text-2xl font-extrabold text-slate-900">
-                        {formatCurrency(analytics?.paidRevenueTotal)}
+                  {!cafeIdForAdmin ? (
+                    <div className="mt-6 text-sm text-slate-600">Select a cafe to load revenue analytics.</div>
+                  ) : analyticsLoading ? (
+                    <div className="mt-6 text-sm text-slate-600">Loading analytics...</div>
+                  ) : !analytics?.byDay?.length && !analytics?.statusBreakdown?.length ? (
+                    <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-600">
+                      No orders were found in this date range, so revenue and order charts are empty.
+                    </div>
+                  ) : (
+                    <div className="mt-6 space-y-6">
+                      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                        <div className="rounded-2xl border border-orange-100 bg-white/90 p-4">
+                          <div className="text-xs uppercase tracking-wide text-slate-500">Paid revenue</div>
+                          <div className="mt-2 text-2xl font-extrabold text-slate-900">
+                            {formatCurrency(analytics?.paidRevenueTotal)}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-orange-100 bg-white/90 p-4">
+                          <div className="text-xs uppercase tracking-wide text-slate-500">Total revenue</div>
+                          <div className="mt-2 text-2xl font-extrabold text-slate-900">
+                            {formatCurrency(analyticsTotals.totalRevenue)}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-orange-100 bg-white/90 p-4">
+                          <div className="text-xs uppercase tracking-wide text-slate-500">Orders</div>
+                          <div className="mt-2 text-2xl font-extrabold text-slate-900">{analyticsTotals.totalOrders}</div>
+                        </div>
+                        <div className="rounded-2xl border border-orange-100 bg-white/90 p-4">
+                          <div className="text-xs uppercase tracking-wide text-slate-500">Open orders</div>
+                          <div className="mt-2 text-2xl font-extrabold text-slate-900">{analyticsTotals.openOrders}</div>
+                        </div>
+                      </div>
+
+                      <div className="h-72 min-w-0 w-full rounded-2xl border border-slate-100 bg-white p-3">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={240}>
+                          <LineChart data={(analytics?.byDay || []).map((day) => ({ ...day, day: formatDayLabel(day._id) }))}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                            <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 11 }} />
+                            <Tooltip />
+                            <Line
+                              type="monotone"
+                              dataKey="revenue"
+                              stroke="#ea580c"
+                              strokeWidth={2}
+                              dot={false}
+                              name="Revenue"
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      <div className="h-60 min-w-0 w-full rounded-2xl border border-slate-100 bg-white p-3">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+                          <BarChart data={analytics?.statusBreakdown || []}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                            <XAxis dataKey="_id" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 11 }} />
+                            <Tooltip />
+                            <Bar dataKey="count" fill="#0d9488" name="Orders" radius={[6, 6, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-orange-100 bg-white/90 p-4">
-                      <div className="text-xs uppercase tracking-wide text-slate-500">Total revenue</div>
-                      <div className="mt-2 text-2xl font-extrabold text-slate-900">
-                        {formatCurrency(analyticsTotals.totalRevenue)}
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-orange-100 bg-white/90 p-4">
-                      <div className="text-xs uppercase tracking-wide text-slate-500">Orders</div>
-                      <div className="mt-2 text-2xl font-extrabold text-slate-900">{analyticsTotals.totalOrders}</div>
-                    </div>
-                    <div className="rounded-2xl border border-orange-100 bg-white/90 p-4">
-                      <div className="text-xs uppercase tracking-wide text-slate-500">Open orders</div>
-                      <div className="mt-2 text-2xl font-extrabold text-slate-900">{analyticsTotals.openOrders}</div>
-                    </div>
-                  </div>
-
-                  <div className="h-72 w-full rounded-2xl border border-slate-100 bg-white p-3">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={(analytics?.byDay || []).map((day) => ({ ...day, day: formatDayLabel(day._id) }))}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-                        <YAxis tick={{ fontSize: 11 }} />
-                        <Tooltip />
-                        <Line
-                          type="monotone"
-                          dataKey="revenue"
-                          stroke="#ea580c"
-                          strokeWidth={2}
-                          dot={false}
-                          name="Revenue"
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  <div className="h-60 w-full rounded-2xl border border-slate-100 bg-white p-3">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={analytics?.statusBreakdown || []}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="_id" tick={{ fontSize: 11 }} />
-                        <YAxis tick={{ fontSize: 11 }} />
-                        <Tooltip />
-                        <Bar dataKey="count" fill="#0d9488" name="Orders" radius={[6, 6, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
 
           <Card className="border border-orange-100 shadow-xl">
             <CardContent>
-              <div className="font-bold text-slate-900">Quick actions</div>
-              <div className="mt-1 text-sm text-slate-600">
-                Jump straight to the area you need instead of scanning the whole page.
-              </div>
+              <SectionHeader
+                title="Quick actions"
+                description="Jump straight to the area you need instead of scanning the whole page."
+                collapsed={collapsedSections.quickActions}
+                onToggle={() => toggleSection("quickActions")}
+              />
 
-              <div className="mt-5 grid gap-3">
-                <Link href="/admin/menu#admin-live-orders" className="rounded-2xl border border-orange-100 bg-white/90 px-4 py-3 font-semibold text-slate-900 transition hover:bg-orange-50">
-                  Live orders
-                </Link>
-                <Link href="/admin/menu#admin-menu-editor" className="rounded-2xl border border-orange-100 bg-white/90 px-4 py-3 font-semibold text-slate-900 transition hover:bg-orange-50">
-                  Menu items
-                </Link>
-                <Link href="/admin/menu#admin-tables" className="rounded-2xl border border-orange-100 bg-white/90 px-4 py-3 font-semibold text-slate-900 transition hover:bg-orange-50">
-                  Table QR codes
-                </Link>
-                <Link href="/admin/menu#admin-staff-create" className="rounded-2xl border border-orange-100 bg-white/90 px-4 py-3 font-semibold text-slate-900 transition hover:bg-orange-50">
-                  Staff accounts
-                </Link>
-                <Link href="/admin/menu#admin-branding" className="rounded-2xl border border-orange-100 bg-white/90 px-4 py-3 font-semibold text-slate-900 transition hover:bg-orange-50">
-                  Branding and settings
-                </Link>
-                <Link href="/admin/history" className="rounded-2xl border border-orange-100 bg-white/90 px-4 py-3 font-semibold text-slate-900 transition hover:bg-orange-50">
-                  Order history
-                </Link>
-              </div>
+              {!collapsedSections.quickActions && (
+                <>
+                  <div className="mt-5 grid gap-3">
+                    <Link href="/admin/menu#admin-live-orders" className="rounded-2xl border border-orange-100 bg-white/90 px-4 py-3 font-semibold text-slate-900 transition hover:bg-orange-50">
+                      Live orders
+                    </Link>
+                    <Link href="/admin/menu#admin-menu-editor" className="rounded-2xl border border-orange-100 bg-white/90 px-4 py-3 font-semibold text-slate-900 transition hover:bg-orange-50">
+                      Menu items
+                    </Link>
+                    <Link href="/admin/menu#admin-tables" className="rounded-2xl border border-orange-100 bg-white/90 px-4 py-3 font-semibold text-slate-900 transition hover:bg-orange-50">
+                      Table QR codes
+                    </Link>
+                    <Link href="/admin/menu#admin-staff-create" className="rounded-2xl border border-orange-100 bg-white/90 px-4 py-3 font-semibold text-slate-900 transition hover:bg-orange-50">
+                      Staff accounts
+                    </Link>
+                    <Link href="/admin/menu#admin-branding" className="rounded-2xl border border-orange-100 bg-white/90 px-4 py-3 font-semibold text-slate-900 transition hover:bg-orange-50">
+                      Branding and settings
+                    </Link>
+                    <Link href="/admin/history" className="rounded-2xl border border-orange-100 bg-white/90 px-4 py-3 font-semibold text-slate-900 transition hover:bg-orange-50">
+                      Order history
+                    </Link>
+                  </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Tables</div>
-                  <div className="mt-1 text-xl font-extrabold text-slate-900">{tables.length}</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Staff</div>
-                  <div className="mt-1 text-xl font-extrabold text-slate-900">{staffList.length}</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Available items</div>
-                  <div className="mt-1 text-xl font-extrabold text-slate-900">{stats.available}</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Live today</div>
-                  <div className="mt-1 text-xl font-extrabold text-slate-900">{orders.length}</div>
-                </div>
-              </div>
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div className="text-xs uppercase tracking-wide text-slate-500">Tables</div>
+                      <div className="mt-1 text-xl font-extrabold text-slate-900">{tables.length}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div className="text-xs uppercase tracking-wide text-slate-500">Staff</div>
+                      <div className="mt-1 text-xl font-extrabold text-slate-900">{staffList.length}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div className="text-xs uppercase tracking-wide text-slate-500">Available items</div>
+                      <div className="mt-1 text-xl font-extrabold text-slate-900">{stats.available}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div className="text-xs uppercase tracking-wide text-slate-500">Live today</div>
+                      <div className="mt-1 text-xl font-extrabold text-slate-900">{orders.length}</div>
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
 
         <Card id="admin-branding" className="border border-orange-100 shadow-xl">
           <CardContent>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="font-bold">Cafe branding</div>
-                <div className="text-sm text-gray-600 mt-1">Update cafe name, branding, and UPI QR.</div>
-              </div>
-              <Button variant="outline" onClick={loadCafe} disabled={cafeLoading || !cafeIdForAdmin}>
-                Refresh branding
-              </Button>
-            </div>
+            <SectionHeader
+              title="Cafe branding"
+              description="Update cafe name, branding, and UPI QR."
+              actions={(
+                <Button variant="outline" onClick={loadCafe} disabled={cafeLoading || !cafeIdForAdmin}>
+                  Refresh branding
+                </Button>
+              )}
+              collapsed={collapsedSections.branding}
+              onToggle={() => toggleSection("branding")}
+            />
 
-            {!cafeIdForAdmin ? (
-              <div className="mt-4 text-sm text-gray-600">Provide a cafeId to edit branding.</div>
-            ) : (
-              <form className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3" onSubmit={saveCafe}>
+            {!collapsedSections.branding && (
+              <>
+                {!cafeIdForAdmin ? (
+                  <div className="mt-4 text-sm text-gray-600">Provide a cafeId to edit branding.</div>
+                ) : (
+                  <form className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3" onSubmit={saveCafe}>
                 <Input
                   value={cafeForm.name}
                   onChange={(e) => setCafeForm((p) => ({ ...p, name: e.target.value }))}
@@ -1846,29 +2025,29 @@ export default function AdminMenuPage() {
                     {cafeLoading ? "Saving..." : isCafeAssetUploading ? "Wait for uploads..." : "Save branding"}
                   </Button>
                 </div>
-              </form>
-            )}
+                  </form>
+                )}
 
-            {cafeError && <div className="mt-3 text-red-700 font-semibold">{cafeError}</div>}
-            {cafeSuccess && <div className="mt-3 text-emerald-700 font-semibold">{cafeSuccess}</div>}
+                {cafeError && <div className="mt-3 text-red-700 font-semibold">{cafeError}</div>}
+                {cafeSuccess && <div className="mt-3 text-emerald-700 font-semibold">{cafeSuccess}</div>}
+              </>
+            )}
           </CardContent>
         </Card>
 
         <Card className="border border-emerald-100 shadow-xl">
           <CardContent>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="font-bold">Non-smoking gallery</div>
-                <div className="text-sm text-gray-600 mt-1">
-                  Upload photos for the website&apos;s non-smoking section and publish them separately from branding.
-                </div>
-              </div>
-              <div className="text-sm font-semibold text-emerald-700">
-                {nonSmokingShots.length} image{nonSmokingShots.length === 1 ? "" : "s"}
-              </div>
-            </div>
+            <SectionHeader
+              title="Non-smoking gallery"
+              description="Upload photos for the website&apos;s non-smoking section and publish them separately from branding."
+              actions={<div className="text-sm font-semibold text-emerald-700">{nonSmokingShots.length} image{nonSmokingShots.length === 1 ? "" : "s"}</div>}
+              collapsed={collapsedSections.nonSmoking}
+              onToggle={() => toggleSection("nonSmoking")}
+            />
 
-            <div className="mt-5 grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
+            {!collapsedSections.nonSmoking && (
+              <>
+                <div className="mt-5 grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
                 <div className="text-sm font-semibold text-slate-900">Upload images</div>
                 <div className="mt-1 text-xs text-slate-500">Select one or more photos. They will be uploaded first, then saved to the website gallery.</div>
@@ -1908,59 +2087,111 @@ export default function AdminMenuPage() {
                   {nonSmokingSaving ? "Saving gallery..." : nonSmokingUploading ? "Wait for uploads..." : "Save non-smoking gallery"}
                 </Button>
               </div>
-            </div>
-
-            <div className="mt-5">
-              {nonSmokingShots.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                  No non-smoking images added yet.
                 </div>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  {nonSmokingShots.map((shot, idx) => (
-                    <div key={`${shot}-${idx}`} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                      <div className="relative h-40 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={shot} alt={`Non-smoking preview ${idx + 1}`} className="h-full w-full object-cover" />
-                      </div>
-                      <div className="mt-3 break-all text-xs text-slate-500">{shot}</div>
-                      <Button className="mt-3 w-full" variant="outline" type="button" onClick={() => removeNonSmokingShot(idx)}>
-                        Remove
-                      </Button>
+                
+                <div className="mt-5">
+                  {nonSmokingShots.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
+                      No non-smoking images added yet.
                     </div>
-                  ))}
+                  ) : (
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                      {nonSmokingShots.map((shot, idx) => (
+                        <div key={`${shot}-${idx}`} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                          <div className="relative h-40 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={shot} alt={`Non-smoking preview ${idx + 1}`} className="h-full w-full object-cover" />
+                          </div>
+                          <div className="mt-3 break-all text-xs text-slate-500">{shot}</div>
+                          <Button className="mt-3 w-full" variant="outline" type="button" onClick={() => removeNonSmokingShot(idx)}>
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {nonSmokingError && <div className="mt-4 text-red-700 font-semibold">{nonSmokingError}</div>}
-            {nonSmokingSuccess && <div className="mt-4 text-emerald-700 font-semibold">{nonSmokingSuccess}</div>}
+                {nonSmokingError && <div className="mt-4 text-red-700 font-semibold">{nonSmokingError}</div>}
+                {nonSmokingSuccess && <div className="mt-4 text-emerald-700 font-semibold">{nonSmokingSuccess}</div>}
+              </>
+            )}
           </CardContent>
         </Card>
 
         <Card id="admin-live-orders" className="border border-orange-100 shadow-xl">
           <CardContent>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="font-bold">Live orders</div>
-                <div className="text-sm text-gray-600 mt-1">
-                  Track customer orders in real time. Socket: <span className="font-semibold">{ordersSocket}</span>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" onClick={loadOrders} disabled={ordersLoading || !tablesCafeId}>
-                  Refresh orders
-                </Button>
-                <Link
-                  href="/admin/history"
-                  className="inline-flex items-center justify-center rounded-full border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-800 shadow-sm hover:bg-orange-50"
-                >
-                  History
-                </Link>
-              </div>
-            </div>
+            <SectionHeader
+              title="Live orders"
+              description={<>Track customer orders in real time. Socket: <span className="font-semibold">{ordersSocket}</span></>}
+              actions={(
+                <>
+                  <Button variant="outline" onClick={toggleCustomerDirectory} disabled={!tablesCafeId || customerDirectoryLoading}>
+                    {customerDirectoryOpen ? "Hide customers" : "Show customers"}
+                  </Button>
+                  <Button variant="outline" onClick={exportCustomerDirectory} disabled={!tablesCafeId || customerDirectoryLoading}>
+                    Export customers
+                  </Button>
+                  <Button variant="outline" onClick={loadOrders} disabled={ordersLoading || !tablesCafeId}>
+                    Refresh orders
+                  </Button>
+                  <Link
+                    href="/admin/history"
+                    className="inline-flex items-center justify-center rounded-full border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-800 shadow-sm hover:bg-orange-50"
+                  >
+                    History
+                  </Link>
+                </>
+              )}
+              collapsed={collapsedSections.liveOrders}
+              onToggle={() => toggleSection("liveOrders")}
+            />
 
+            {!collapsedSections.liveOrders && (
+              <>
             {ordersError && <div className="mt-3 text-red-700 font-semibold">{ordersError}</div>}
+            {customerDirectoryError && <div className="mt-3 text-red-700 font-semibold">{customerDirectoryError}</div>}
+
+            {customerDirectoryOpen && (
+              <div className="mt-4 rounded-2xl border border-orange-100 bg-orange-50/40 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-slate-900">Customers</div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      Names and mobile numbers collected from this cafe&apos;s order history.
+                    </div>
+                  </div>
+                  <div className="text-sm font-semibold text-slate-700">
+                    {customerDirectory.length} customer{customerDirectory.length === 1 ? "" : "s"}
+                  </div>
+                </div>
+
+                {customerDirectoryLoading ? (
+                  <div className="mt-4 text-sm text-slate-600">Loading customers...</div>
+                ) : customerDirectory.length === 0 ? (
+                  <div className="mt-4 text-sm text-slate-600">No customer details found yet.</div>
+                ) : (
+                  <div className="mt-4 overflow-x-auto rounded-2xl border border-white/80 bg-white">
+                    <table className="w-full min-w-[420px] text-sm text-slate-700">
+                      <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3">Customer name</th>
+                          <th className="px-4 py-3">Mobile number</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {customerDirectory.map((customer, idx) => (
+                          <tr key={`${customer.phone}-${customer.name}-${idx}`} className="border-t border-slate-100">
+                            <td className="px-4 py-3 font-medium text-slate-900">{customer.name}</td>
+                            <td className="px-4 py-3">{customer.phone}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
 
             {tablesCafeId ? (
               orders.length === 0 && !ordersLoading ? (
@@ -1995,29 +2226,32 @@ export default function AdminMenuPage() {
             ) : (
               <div className="mt-4 text-sm text-gray-600">Provide a cafeId to view orders.</div>
             )}
+              </>
+            )}
           </CardContent>
         </Card>
 
         <Card id="admin-tables" className="border border-orange-100 shadow-xl">
           <CardContent>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="font-bold">Table QR codes</div>
-                <div className="text-sm text-gray-600 mt-1">
-                  One QR per table, generated in the browser (no per-table API image requests). Links use your public ordering URL
-                  under Cafe branding, then env, then this origin.
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" onClick={deleteAllTables} disabled={tablesLoading || !tablesCafeId}>
-                  Delete all QRs
-                </Button>
-                <Button variant="outline" onClick={loadTables} disabled={tablesLoading || !tablesCafeId}>
-                  Refresh tables
-                </Button>
-              </div>
-            </div>
+            <SectionHeader
+              title="Table QR codes"
+              description="One QR per table, generated in the browser. Links use your public ordering URL under Cafe branding, then env, then this origin."
+              actions={(
+                <>
+                  <Button variant="outline" onClick={deleteAllTables} disabled={tablesLoading || !tablesCafeId}>
+                    Delete all QRs
+                  </Button>
+                  <Button variant="outline" onClick={loadTables} disabled={tablesLoading || !tablesCafeId}>
+                    Refresh tables
+                  </Button>
+                </>
+              )}
+              collapsed={collapsedSections.tables}
+              onToggle={() => toggleSection("tables")}
+            />
 
+            {!collapsedSections.tables && (
+              <>
             <form
               className="mt-4 flex flex-wrap items-center gap-3"
               onSubmit={(event) => {
@@ -2113,20 +2347,22 @@ export default function AdminMenuPage() {
                 Provide a cafeId to load table QR codes.
               </div>
             )}
+              </>
+            )}
           </CardContent>
         </Card>
 
         <Card id="admin-staff-create" className="border border-orange-100 shadow-xl">
           <CardContent>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="font-bold">Create staff account</div>
-                <div className="text-sm text-gray-600 mt-1">
-                  Add chef or waiter accounts for your cafe. Super admins must provide a cafeId.
-                </div>
-              </div>
-            </div>
+            <SectionHeader
+              title="Create staff account"
+              description="Add chef, waiter, or admin accounts for your cafe. Super admins must provide a cafeId."
+              collapsed={collapsedSections.staffCreate}
+              onToggle={() => toggleSection("staffCreate")}
+            />
 
+            {!collapsedSections.staffCreate && (
+              <>
             <form className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3" onSubmit={createStaff}>
               <Input
                 value={staffUsername}
@@ -2153,6 +2389,7 @@ export default function AdminMenuPage() {
               >
                 <option value="kitchen">Chef (Kitchen)</option>
                 <option value="staff">Waiter/Staff</option>
+                <option value="cafe_admin">Admin</option>
               </select>
               <div className="md:col-span-2">
                 <Button className="w-full" type="submit" disabled={staffLoading}>
@@ -2163,21 +2400,27 @@ export default function AdminMenuPage() {
 
             {staffError && <div className="mt-3 text-red-700 font-semibold">{staffError}</div>}
             {staffSuccess && <div className="mt-3 text-emerald-700 font-semibold">{staffSuccess}</div>}
+              </>
+            )}
           </CardContent>
         </Card>
 
         <Card id="admin-staff-list" className="border border-orange-100 shadow-xl">
           <CardContent>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="font-bold">Staff accounts</div>
-                <div className="text-sm text-gray-600 mt-1">Manage chef and waiter accounts.</div>
-              </div>
-              <Button variant="outline" onClick={loadStaff} disabled={staffListLoading || !staffCafeId}>
-                Refresh staff
-              </Button>
-            </div>
+            <SectionHeader
+              title="Staff accounts"
+              description="Manage chef, waiter, and admin accounts."
+              actions={(
+                <Button variant="outline" onClick={loadStaff} disabled={staffListLoading || !staffCafeId}>
+                  Refresh staff
+                </Button>
+              )}
+              collapsed={collapsedSections.staffList}
+              onToggle={() => toggleSection("staffList")}
+            />
 
+            {!collapsedSections.staffList && (
+              <>
             {staffListError && <div className="mt-3 text-red-700 font-semibold">{staffListError}</div>}
 
             {staffCafeId ? (
@@ -2211,14 +2454,25 @@ export default function AdminMenuPage() {
             ) : (
               <div className="mt-4 text-sm text-gray-600">Provide a cafeId to manage staff.</div>
             )}
+              </>
+            )}
           </CardContent>
         </Card>
 
         {error && <div className="text-red-700 font-semibold">{error}</div>}
 
         <div id="admin-menu-editor" className="grid grid-cols-1 lg:grid-cols-[0.95fr_1.05fr] gap-6">
-          <Card className="border border-orange-100 shadow-xl">
+          <Card id="admin-menu-create" className="border border-orange-100 shadow-xl">
             <CardContent>
+              <SectionHeader
+                title="Add new item"
+                description="Create menu items or use CSV upload tools for this cafe."
+                collapsed={collapsedSections.menuCreate}
+                onToggle={() => toggleSection("menuCreate")}
+              />
+
+              {!collapsedSections.menuCreate && (
+                <>
               <div className="mb-6 rounded-2xl border border-orange-100 bg-white/80 p-4">
                 <div className="text-sm font-bold text-slate-900">Bulk upload menu (CSV)</div>
                 <div className="mt-1 text-xs text-slate-500">
@@ -2314,7 +2568,6 @@ export default function AdminMenuPage() {
                   <span className="text-xs text-slate-500">This removes every item for this cafe.</span>
                 </div>
               </div>
-              <h2 className="text-xl font-bold mb-4">Add new item</h2>
               <form onSubmit={createItem} className="grid grid-cols-1 gap-3">
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" required />
                 <Input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price" type="number" required />
@@ -2367,23 +2620,31 @@ export default function AdminMenuPage() {
                   {loading ? "Saving..." : "Create item"}
                 </Button>
               </form>
+                </>
+              )}
             </CardContent>
           </Card>
 
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-extrabold">Items</h2>
-              <div className="w-full max-w-sm">
-                <Input
-                  value={itemSearch}
-                  onChange={(e) => setItemSearch(e.target.value)}
-                  placeholder="Search menu items"
-                />
-              </div>
-            </div>
-            <div className="text-xs text-slate-500">
-              Showing {visibleItems.length} of {items.length} items
-            </div>
+          <Card id="admin-menu-items" className="border border-orange-100 shadow-xl">
+            <CardContent>
+              <SectionHeader
+                title="Items"
+                description={`Showing ${visibleItems.length} of ${items.length} items.`}
+                actions={(
+                  <div className="w-full max-w-sm">
+                    <Input
+                      value={itemSearch}
+                      onChange={(e) => setItemSearch(e.target.value)}
+                      placeholder="Search menu items"
+                    />
+                  </div>
+                )}
+                collapsed={collapsedSections.menuItems}
+                onToggle={() => toggleSection("menuItems")}
+              />
+
+              {!collapsedSections.menuItems && (
+                <div className="mt-4 space-y-4">
             {visibleItems.map((it) => {
               const editing = editingId === it._id;
               return (
@@ -2489,7 +2750,10 @@ export default function AdminMenuPage() {
             {!loading && items.length === 0 && (
               <div className="text-gray-700">No menu items yet.</div>
             )}
-          </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
     </StaffShell>
   );

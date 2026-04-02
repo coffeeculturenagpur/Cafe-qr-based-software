@@ -446,8 +446,8 @@ export default function SuperAdminPage() {
                     INR {Number(analytics.paidRevenueTotal || 0).toFixed(0)}
                   </div>
                 </div>
-                <div className="h-72 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-72 min-w-0 w-full">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={240}>
                     <LineChart data={(analytics.byDay || []).map((d) => ({ ...d, day: d._id }))}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis dataKey="day" tick={{ fontSize: 11 }} />
@@ -457,8 +457,8 @@ export default function SuperAdminPage() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-64 min-w-0 w-full">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
                     <BarChart data={analytics.statusBreakdown || []}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis dataKey="_id" tick={{ fontSize: 11 }} />
