@@ -17,6 +17,7 @@ import { Button } from "../../components/ui/Button";
 import { Card, CardContent } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { AppLoading } from "../../components/AppLoading";
+import { getOrderStatusPalette } from "../../lib/orderStatusPalette";
 
 function upsertOrder(list, order) {
   const idx = list.findIndex((x) => x._id === order._id);
@@ -568,9 +569,11 @@ export default function WaiterPage() {
         {error && <div className="text-red-700 font-semibold">{error}</div>}
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {orders.map((o) => (
+          {orders.map((o) => {
+            const statusPalette = getOrderStatusPalette(o.status);
+            return (
             <motion.div key={o._id} initial={motionInitial} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-              <Card className="border border-orange-100 shadow-lg">
+              <Card className={`shadow-lg ${statusPalette.card}`}>
                 <CardContent>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -579,8 +582,8 @@ export default function WaiterPage() {
                         {o.customerName} - {o.phone}
                       </div>
                     </div>
-                    <div className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold uppercase text-orange-700">
-                      {o.status}
+                    <div className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase ${statusPalette.pill}`}>
+                      {statusPalette.normalized || o.status}
                     </div>
                   </div>
 
@@ -657,7 +660,8 @@ export default function WaiterPage() {
                 </CardContent>
               </Card>
             </motion.div>
-          ))}
+            );
+          })}
         </div>
 
         {!loading && cafeId && orders.length === 0 && <div className="text-gray-700">No orders yet.</div>}

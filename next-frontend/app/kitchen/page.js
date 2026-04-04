@@ -20,6 +20,7 @@ import { Input, Textarea } from "../../components/ui/Input";
 import { AppLoading } from "../../components/AppLoading";
 import { getCafeWithCache } from "../../lib/cafeClient";
 import { getMenuWithCache } from "../../lib/menuClient";
+import { getOrderStatusPalette } from "../../lib/orderStatusPalette";
 import { ClipboardList, QrCode } from "lucide-react";
 
 function formatKitchenPhone(phone) {
@@ -569,20 +570,15 @@ export default function KitchenPage() {
         <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
           {filteredOrders.map((o) => {
             const isManual = o.source === "manual";
+            const statusPalette = getOrderStatusPalette(o.status);
             return (
             <motion.div key={o._id} initial={motionInitial} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="min-w-0">
               <Card
-                className={`overflow-hidden border shadow-lg transition ${
-                  isManual
-                    ? "border-amber-200/90 ring-1 ring-amber-100/80"
-                    : "border-slate-200/90 ring-1 ring-slate-100/80"
-                }`}
+                className={`overflow-hidden shadow-lg transition ${statusPalette.card}`}
               >
                 <CardContent className="p-0">
                   <div
-                    className={`flex flex-wrap items-start justify-between gap-3 border-b px-4 py-4 sm:px-5 ${
-                      isManual ? "border-amber-100 bg-amber-50/50" : "border-slate-100 bg-slate-50/40"
-                    }`}
+                    className={`flex flex-wrap items-start justify-between gap-3 border-b px-4 py-4 sm:px-5 ${statusPalette.header}`}
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -610,8 +606,8 @@ export default function KitchenPage() {
                         <div className="text-xs text-slate-500">{formatKitchenPhone(o.phone)}</div>
                       </div>
                     </div>
-                    <div className="shrink-0 rounded-full border border-orange-200 bg-white px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-orange-800 shadow-sm">
-                      {o.status === "baking" ? "preparing" : o.status}
+                    <div className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-wide shadow-sm ${statusPalette.pill}`}>
+                      {statusPalette.normalized || o.status}
                     </div>
                   </div>
 
