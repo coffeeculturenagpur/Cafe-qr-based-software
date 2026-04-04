@@ -16,6 +16,7 @@ const orderSchema = new mongoose.Schema(
     tableNumber: { type: Number, required: true, min: 1 },
     /** UUID per table visit — isolates customer order list from previous guests at the same table */
     visitId: { type: String, trim: true, default: "", index: true },
+    customerIpKey: { type: String, trim: true, default: "", index: true },
 
     customerName: { type: String, required: true, trim: true },
     phone: { type: String, required: true, trim: true },
@@ -58,6 +59,7 @@ const orderSchema = new mongoose.Schema(
 
 orderSchema.index({ cafeId: 1, createdAt: -1 });
 orderSchema.index({ cafeId: 1, tableNumber: 1, visitId: 1 });
+orderSchema.index({ cafeId: 1, tableNumber: 1, customerIpKey: 1 });
 
 module.exports = mongoose.model("Order", orderSchema);
 

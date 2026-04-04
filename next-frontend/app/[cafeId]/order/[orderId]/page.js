@@ -60,7 +60,11 @@ export default function OrderStatusPage() {
   const load = async () => {
     if (tableGuard.status !== "ok") return;
     try {
-      const found = await apiFetch(`/api/orders/${cafeId}/id/${orderId}`);
+      const q = new URLSearchParams({
+        table: String(tableNumber || ""),
+        t: tableToken,
+      });
+      const found = await apiFetch(`/api/orders/${cafeId}/id/${orderId}?${q.toString()}`, { credentials: "include" });
       setOrder(found || null);
     } catch (e) {
       setError(e.message || "Failed to load order");

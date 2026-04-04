@@ -5,7 +5,7 @@ import Link from "next/link";
 import { apiFetch } from "../../lib/api";
 import { isOrderInLocalToday, ordersTodayQueryString } from "../../lib/staffOrderRange";
 import { filterWaiterLiveOrders, isWaiterLiveOrder } from "../../lib/staffOrderFilters";
-import { maybeNotifyBrowser, playWaiterReady, requestNotificationPermission } from "../../lib/sounds";
+import { maybeNotifyBrowser, playSuccess, playWaiterReady, requestNotificationPermission } from "../../lib/sounds";
 import { motion, useReducedMotion } from "framer-motion";
 import { authHeaders } from "../../lib/auth";
 import { useClientAuth } from "../../lib/useClientAuth";
@@ -17,7 +17,9 @@ import { Button } from "../../components/ui/Button";
 import { Card, CardContent } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { AppLoading } from "../../components/AppLoading";
+import { groupOrdersByTable } from "../../lib/orderGrouping";
 import { getOrderStatusPalette } from "../../lib/orderStatusPalette";
+import { ChevronDown } from "lucide-react";
 
 function upsertOrder(list, order) {
   const idx = list.findIndex((x) => x._id === order._id);
@@ -54,6 +56,7 @@ export default function WaiterPage() {
   const [socketState, setSocketState] = useState("disconnected");
   const [readyNotice, setReadyNotice] = useState(null);
   const [cafeInfo, setCafeInfo] = useState(null);
+  const [expandedTables, setExpandedTables] = useState({});
 
   const stats = useMemo(() => {
     const total = orders.length;
@@ -65,6 +68,8 @@ export default function WaiterPage() {
       .reduce((sum, order) => sum + getOrderTotal(order, cafeInfo), 0);
     return { total, ready, served, todayTotalOrders, todayRevenue };
   }, [orders, todayOrders, cafeInfo]);
+
+  const groupedOrders = useMemo(() => groupOrdersByTable(orders), [orders]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -158,7 +163,8 @@ export default function WaiterPage() {
     };
   }, [cafeId]);
 
-  const setStatus = async (orderId, status) => {
+  const setStatus = async (orderId, status, options = {}) => {
+    const { playSoundOnSuccess = true } = options;
     setLoading(true);
     setError("");
     try {
@@ -172,11 +178,21 @@ export default function WaiterPage() {
         return filterWaiterLiveOrders(next);
       });
       setTodayOrders((prev) => upsertOrder(prev, updated));
+      if (playSoundOnSuccess) playSuccess();
     } catch (e) {
       setError(e.message || "Failed to update order");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleStatusAction = (orderId, status) => {
+    playSuccess();
+    setStatus(orderId, status, { playSoundOnSuccess: false });
+  };
+
+  const toggleTableExpanded = (tableKey) => {
+    setExpandedTables((prev) => ({ ...prev, [tableKey]: !prev[tableKey] }));
   };
 
   const downloadReceiptPdf = (order) => {
@@ -568,8 +584,159 @@ export default function WaiterPage() {
 
         {error && <div className="text-red-700 font-semibold">{error}</div>}
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {orders.map((o) => {
+        <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2 2xl:grid-cols-3">
+          {groupedOrders.map((group) => {
+            const latestOrder = group.latestOrder;
+            const groupedStatus =
+              group.orders.find((order) => String(order?.status || "").toLowerCase() === "ready")?.status ||
+              latestOrder?.status;
+            const statusPalette = getOrderStatusPalette(groupedStatus);
+            const isExpanded = Boolean(expandedTables[group.tableKey]);
+            return (
+            <motion.div key={group.tableKey} initial={motionInitial} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+              <Card className={`shadow-md ${statusPalette.cardClassName || ""}`} style={statusPalette.cardStyle}>
+                <CardContent style={statusPalette.bodyStyle}>
+                  <button
+                    type="button"
+                    onClick={() => toggleTableExpanded(group.tableKey)}
+                    className={`flex w-full flex-wrap items-start justify-between gap-2 px-2.5 py-2 text-left ${
+                      String(groupedStatus || "").toLowerCase() === "ready" ? "kitchen-order-attention rounded-xl p-1" : ""
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className={`text-[18px] font-black leading-none ${statusPalette.titleClassName || "text-slate-900"}`}>Table {group.tableNumber}</div>
+                      <div className={`break-words text-[11px] font-extrabold ${statusPalette.mutedTextClassName || "text-gray-600"}`}>
+                        {group.customerNames.length ? group.customerNames.join(", ") : "Guest"}
+                      </div>
+                      <div className={`mt-1 text-xs ${statusPalette.mutedTextClassName || "text-slate-500"}`}>
+                        {group.orders.length} orders • {group.phones.length ? group.phones.join(" • ") : "No phone"}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <div
+                        className={`rounded-full border px-2.5 py-1 text-[11px] font-extrabold uppercase ${statusPalette.pillClassName || ""}`}
+                        style={statusPalette.pillStyle}
+                      >
+                        {statusPalette.normalized || groupedStatus}
+                      </div>
+                      <div className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase ${statusPalette.mutedTextClassName || "text-slate-500"}`}>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                        {isExpanded ? "Hide orders" : "Show orders"}
+                      </div>
+                    </div>
+                  </button>
+
+                  {isExpanded ? (
+                    <div className="mt-2 space-y-2 px-2 pb-2 sm:px-2.5">
+                      {group.orders.map((o) => {
+                        const orderPalette = getOrderStatusPalette(o.status);
+                        return (
+                          <div key={o._id} className="rounded-md border border-slate-200 bg-white/60 p-2">
+                            <div className="flex flex-wrap items-start justify-between gap-1.5">
+                              <div className="min-w-0">
+                                <div className={`text-[14px] font-black leading-tight ${orderPalette.titleClassName || "text-slate-900"}`}>Order #{String(o._id).slice(-6)}</div>
+                                <div className={`break-words text-[11px] font-bold leading-tight ${orderPalette.mutedTextClassName || "text-gray-600"}`}>
+                                  {o.customerName || "Guest"} - {o.phone || "-"}
+                                </div>
+                              </div>
+                              <div
+                                className={`rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase ${orderPalette.pillClassName || ""}`}
+                                style={orderPalette.pillStyle}
+                              >
+                                {orderPalette.normalized || o.status}
+                              </div>
+                            </div>
+
+                            <div
+                              className={`mt-1.5 max-h-[min(8rem,20vh)] space-y-1 overflow-y-auto rounded-md border p-1.5 text-[12px] ${orderPalette.panelClassName || "border-slate-100"} ${orderPalette.panelTextClassName || "text-slate-900"}`}
+                              style={orderPalette.panelStyle}
+                            >
+                              {o.items.map((it, idx) => (
+                                <div key={idx} className="flex items-start justify-between gap-2">
+                                  <span className="min-w-0 break-words font-extrabold text-slate-900">
+                                    {it.name} <span className="font-semibold text-slate-600">x {it.qty}</span>
+                                  </span>
+                                  <span className="shrink-0 font-extrabold text-slate-900">INR {(it.price * it.qty).toFixed(2)}</span>
+                                </div>
+                              ))}
+                            </div>
+
+                            {o.paymentMode && (
+                              <div className={`mt-1.5 text-[11px] font-extrabold ${orderPalette.textClassName || "text-slate-700"}`}>
+                                Payment: {String(o.paymentMode).toUpperCase()}
+                              </div>
+                            )}
+
+                            {o.notes ? (
+                              <div className="mt-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900">
+                                <div className="text-[10px] font-extrabold uppercase tracking-wide text-amber-700">Order note</div>
+                                <div className="mt-0.5 break-words font-semibold leading-snug">{o.notes}</div>
+                              </div>
+                            ) : null}
+
+                            {(() => {
+                              const lineSum = o.items.reduce((s, it) => s + Number(it.price || 0) * Number(it.qty || 0), 0);
+                              const hasServerPricing = typeof o.subtotalAmount === "number" && typeof o.taxAmount === "number";
+                              const subtotal = hasServerPricing ? Number(o.subtotalAmount) : Number(o.totalAmount || lineSum);
+                              const discount = typeof o.discountAmount === "number" ? Number(o.discountAmount) : 0;
+                              const taxRate = Number(cafeInfo?.taxPercent || 0);
+                              const taxAmount = hasServerPricing ? Number(o.taxAmount) : subtotal * (taxRate / 100);
+                              const totalFinal = hasServerPricing ? Number(o.totalAmount || 0) : subtotal + taxAmount;
+                              return (
+                                <div
+                                  className={`mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 rounded-md border px-2 py-1.5 text-[11px] ${orderPalette.panelClassName || "border-slate-100"} ${orderPalette.panelTextClassName || "text-slate-900"}`}
+                                  style={orderPalette.panelStyle}
+                                >
+                                  <div className={`font-semibold ${orderPalette.panelMutedTextClassName || "text-slate-600"}`}>
+                                    <span>Subtotal</span>
+                                  </div>
+                                  <div className={`text-right font-bold ${orderPalette.panelMutedTextClassName || "text-slate-600"}`}>INR {subtotal.toFixed(2)}</div>
+                                  {discount > 0 && (
+                                    <div className={`font-semibold ${orderPalette.panelMutedTextClassName || "text-slate-600"}`}>
+                                      <span>Discount</span>
+                                    </div>
+                                  )}
+                                  {discount > 0 && (
+                                    <div className={`text-right font-bold ${orderPalette.panelMutedTextClassName || "text-slate-600"}`}>- INR {discount.toFixed(2)}</div>
+                                  )}
+                                  <div className={`font-semibold ${orderPalette.panelMutedTextClassName || "text-slate-600"}`}>
+                                    <span>Tax {!hasServerPricing && taxRate ? `(${taxRate}%)` : ""}</span>
+                                  </div>
+                                  <div className={`text-right font-bold ${orderPalette.panelMutedTextClassName || "text-slate-600"}`}>INR {taxAmount.toFixed(2)}</div>
+                                  <div className={`font-extrabold ${orderPalette.panelTextClassName || "text-slate-900"}`}>
+                                    <span>Total</span>
+                                  </div>
+                                  <div className={`text-right font-extrabold ${orderPalette.panelTextClassName || "text-slate-900"}`}>INR {totalFinal.toFixed(2)}</div>
+                                </div>
+                              );
+                            })()}
+
+                            <div className="mt-1.5 grid grid-cols-2 gap-1 sm:grid-cols-4">
+                              <Button size="sm" className="w-full justify-center px-1.5 py-1 text-[11px] font-extrabold" variant="outline" onClick={() => handleStatusAction(o._id, "served")} disabled={loading}>
+                                Served
+                              </Button>
+                              <Button size="sm" className="w-full justify-center px-1.5 py-1 text-[11px] font-extrabold" variant="outline" onClick={() => handleStatusAction(o._id, "paid")} disabled={loading}>
+                                Paid
+                              </Button>
+                              <Button size="sm" className="w-full justify-center px-1.5 py-1 text-[11px] font-extrabold" variant="outline" onClick={() => handleStatusAction(o._id, "rejected")} disabled={loading}>
+                                Reject
+                              </Button>
+                              <Button size="sm" className="w-full justify-center px-1.5 py-1 text-[11px] font-extrabold" variant="outline" onClick={() => downloadReceiptPdf(o)} disabled={loading}>
+                                PDF
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            </motion.div>
+            );
+          })}
+
+          {false && orders.map((o) => {
             const statusPalette = getOrderStatusPalette(o.status);
             return (
             <motion.div key={o._id} initial={motionInitial} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
@@ -653,13 +820,13 @@ export default function WaiterPage() {
                   })()}
 
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <Button variant="outline" onClick={() => setStatus(o._id, "served")} disabled={loading}>
+                    <Button variant="outline" onClick={() => handleStatusAction(o._id, "served")} disabled={loading}>
                       Served
                     </Button>
-                    <Button variant="outline" onClick={() => setStatus(o._id, "paid")} disabled={loading}>
+                    <Button variant="outline" onClick={() => handleStatusAction(o._id, "paid")} disabled={loading}>
                       Paid
                     </Button>
-                    <Button variant="outline" onClick={() => setStatus(o._id, "rejected")} disabled={loading}>
+                    <Button variant="outline" onClick={() => handleStatusAction(o._id, "rejected")} disabled={loading}>
                       Reject
                     </Button>
                     <Button variant="outline" onClick={() => downloadReceiptPdf(o)} disabled={loading}>
@@ -673,7 +840,7 @@ export default function WaiterPage() {
           })}
         </div>
 
-        {!loading && cafeId && orders.length === 0 && <div className="text-gray-700">No orders yet.</div>}
+        {!loading && cafeId && groupedOrders.length === 0 && <div className="text-gray-700">No orders yet.</div>}
       </div>
     </StaffShell>
   );

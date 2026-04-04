@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Volume2, VolumeX, Smartphone } from "lucide-react";
+import { Volume2, VolumeX, Smartphone, Bell } from "lucide-react";
+import { primeSoundSystem, testSoundAndVibration } from "../lib/sounds";
 import { getSoundPreferences, setSoundPreferences } from "../lib/soundPreferences";
 
 export default function SoundControl({ className = "" }) {
@@ -9,6 +10,7 @@ export default function SoundControl({ className = "" }) {
   const [prefs, setPrefs] = useState({ muted: true, volume: 0.65, vibrate: true });
 
   useEffect(() => {
+    primeSoundSystem();
     setPrefs(getSoundPreferences());
     const onChange = () => setPrefs(getSoundPreferences());
     window.addEventListener("qrdine-sound-prefs", onChange);
@@ -23,6 +25,14 @@ export default function SoundControl({ className = "" }) {
   const toggleVibrate = () => {
     setSoundPreferences({ vibrate: !prefs.vibrate });
     setPrefs(getSoundPreferences());
+  };
+
+  const runTest = () => {
+    if (prefs.muted) {
+      setSoundPreferences({ muted: false });
+      setPrefs(getSoundPreferences());
+    }
+    testSoundAndVibration();
   };
 
   return (
@@ -54,6 +64,15 @@ export default function SoundControl({ className = "" }) {
         aria-label={prefs.vibrate ? "Vibration on" : "Vibration off"}
       >
         <Smartphone size={18} strokeWidth={2.2} className={prefs.vibrate ? "menu-text" : "menu-muted"} />
+      </button>
+      <button
+        type="button"
+        onClick={runTest}
+        className="menu-muted flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/10"
+        aria-label="Test sound and vibration"
+        title="Test sound and vibration"
+      >
+        <Bell size={18} strokeWidth={2.2} className="menu-text" />
       </button>
     </div>
   );

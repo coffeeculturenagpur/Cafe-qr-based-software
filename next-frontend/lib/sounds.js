@@ -1,6 +1,11 @@
-/** Attention cues — respects `soundPreferences` (mute / volume). */
+/** Attention cues - respects `soundPreferences` (mute / volume). */
 
 import { getSoundPreferences } from "./soundPreferences";
+
+let sharedAudioContext = null;
+let soundSystemPrimed = false;
+let unlockListenersAttached = false;
+let lastVibrationAt = 0;
 
 function effectiveGain(baseGain) {
   const { muted, volume } = getSoundPreferences();
@@ -8,51 +13,122 @@ function effectiveGain(baseGain) {
   return baseGain * volume;
 }
 
-function playOscillator(freq, durationMs, type = "sine", gainValue = 0.06) {
-  if (typeof window === "undefined") return;
-  const g = effectiveGain(gainValue);
-  if (g <= 0) return;
+function getAudioContext() {
+  if (typeof window === "undefined") return null;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  if (!sharedAudioContext || sharedAudioContext.state === "closed") {
+    try {
+      sharedAudioContext = new Ctx();
+    } catch {
+      sharedAudioContext = null;
+    }
+  }
+  return sharedAudioContext;
+}
+
+function resumeAudioContext() {
+  const ctx = getAudioContext();
+  if (!ctx || ctx.state === "running") return Promise.resolve(ctx);
+  return ctx.resume().then(() => ctx).catch(() => ctx);
+}
+
+function scheduleOscillator(ctx, freq, durationMs, type, gainValue) {
   try {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
+    const startAt = ctx.currentTime + 0.001;
+    const endAt = startAt + durationMs / 1000;
     osc.type = type;
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(g, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + durationMs / 1000);
+    osc.frequency.setValueAtTime(freq, startAt);
+    gain.gain.setValueAtTime(Math.max(gainValue, 0.0001), startAt);
+    gain.gain.exponentialRampToValueAtTime(0.0001, endAt);
     osc.connect(gain);
     gain.connect(ctx.destination);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + durationMs / 1000);
-    setTimeout(() => ctx.close().catch(() => {}), durationMs + 50);
+    osc.start(startAt);
+    osc.stop(endAt);
   } catch {
     // ignore
   }
 }
 
+function removeUnlockListeners() {
+  if (typeof window === "undefined" || !unlockListenersAttached) return;
+  unlockListenersAttached = false;
+  window.removeEventListener("pointerdown", unlockSoundSystem, true);
+  window.removeEventListener("touchstart", unlockSoundSystem, true);
+  window.removeEventListener("keydown", unlockSoundSystem, true);
+  window.removeEventListener("click", unlockSoundSystem, true);
+}
+
+function unlockSoundSystem() {
+  const ctx = getAudioContext();
+  if (!ctx) {
+    removeUnlockListeners();
+    return;
+  }
+  resumeAudioContext().finally(() => {
+    if (ctx.state === "running") removeUnlockListeners();
+  });
+}
+
+export function primeSoundSystem() {
+  if (typeof window === "undefined" || soundSystemPrimed) return;
+  soundSystemPrimed = true;
+  getAudioContext();
+  if (unlockListenersAttached) return;
+  unlockListenersAttached = true;
+  window.addEventListener("pointerdown", unlockSoundSystem, true);
+  window.addEventListener("touchstart", unlockSoundSystem, true);
+  window.addEventListener("keydown", unlockSoundSystem, true);
+  window.addEventListener("click", unlockSoundSystem, true);
+}
+
+function playOscillator(freq, durationMs, type = "sine", gainValue = 0.06) {
+  if (typeof window === "undefined") return;
+  primeSoundSystem();
+  const g = effectiveGain(gainValue);
+  if (g <= 0) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  if (ctx.state === "running") {
+    scheduleOscillator(ctx, freq, durationMs, type, g);
+    return;
+  }
+  resumeAudioContext().then((resumedCtx) => {
+    if (!resumedCtx || resumedCtx.state !== "running") return;
+    scheduleOscillator(resumedCtx, freq, durationMs, type, g);
+  });
+}
+
 function vibrate(pattern) {
   const { vibrate } = getSoundPreferences();
-  if (!vibrate || typeof navigator === "undefined" || !navigator.vibrate) return;
-  navigator.vibrate(pattern);
+  if (!vibrate || typeof navigator === "undefined" || typeof navigator.vibrate !== "function") return;
+  const now = Date.now();
+  if (now - lastVibrationAt < 150) return;
+  lastVibrationAt = now;
+  try {
+    navigator.vibrate(pattern);
+  } catch {
+    // ignore
+  }
 }
 
 export function playKitchenNewOrder() {
-  playOscillator(520, 140, "triangle", 0.08);
-  setTimeout(() => playOscillator(780, 120, "triangle", 0.06), 100);
-  vibrate([80, 40, 80]);
+  playOscillator(740, 170, "triangle", 0.14);
+  setTimeout(() => playOscillator(1040, 150, "triangle", 0.12), 120);
+  vibrate([90, 50, 90]);
 }
 
 export function playWaiterReady() {
-  playOscillator(660, 100, "sine", 0.07);
-  setTimeout(() => playOscillator(880, 160, "sine", 0.07), 90);
-  vibrate([60, 30, 60, 30, 120]);
+  playOscillator(880, 120, "sine", 0.13);
+  setTimeout(() => playOscillator(1175, 200, "sine", 0.13), 90);
+  vibrate([70, 35, 70, 35, 140]);
 }
 
 export function playCustomerStatus() {
-  playOscillator(440, 80, "sine", 0.05);
-  vibrate(40);
+  playOscillator(660, 110, "sine", 0.11);
+  vibrate(60);
 }
 
 /** Quick blip when adding to cart */
@@ -63,28 +139,36 @@ export function playAddToCart() {
 }
 
 export function playSuccess() {
-  playOscillator(523, 90, "sine", 0.06);
-  setTimeout(() => playOscillator(659, 100, "sine", 0.07), 70);
-  setTimeout(() => playOscillator(784, 120, "sine", 0.06), 150);
-  vibrate([30, 20, 40]);
+  playOscillator(659, 110, "sine", 0.12);
+  setTimeout(() => playOscillator(880, 120, "sine", 0.13), 70);
+  setTimeout(() => playOscillator(1175, 150, "sine", 0.12), 160);
+  vibrate([40, 25, 55]);
 }
 
 export function playSoftError() {
-  playOscillator(220, 120, "triangle", 0.05);
-  setTimeout(() => playOscillator(180, 140, "triangle", 0.04), 80);
-  vibrate([50, 40, 50]);
+  playOscillator(240, 150, "triangle", 0.1);
+  setTimeout(() => playOscillator(180, 180, "triangle", 0.09), 95);
+  vibrate([55, 45, 60]);
 }
 
 export function playTabSwitch() {
   playOscillator(440, 45, "sine", 0.04);
 }
 
+export function testSoundAndVibration() {
+  playOscillator(784, 140, "triangle", 0.14);
+  setTimeout(() => playOscillator(988, 160, "sine", 0.14), 130);
+  setTimeout(() => playOscillator(1319, 220, "sine", 0.14), 300);
+  vibrate([70, 40, 70]);
+}
+
 /**
- * Optional short UI clip from /sounds/*.mp3 — only if file exists and unmuted.
+ * Optional short UI clip from /sounds/*.mp3 - only if file exists and unmuted.
  * Falls back silently if missing.
  */
 export function playUiSound(filename) {
   if (typeof window === "undefined") return;
+  primeSoundSystem();
   const g = effectiveGain(0.08);
   if (g <= 0) return;
   try {
@@ -98,9 +182,14 @@ export function playUiSound(filename) {
 
 export function maybeNotifyBrowser(title, body) {
   if (typeof window === "undefined" || typeof Notification === "undefined") return;
+  const { vibrate } = getSoundPreferences();
   if (Notification.permission === "granted") {
     try {
-      new Notification(title, { body, silent: false });
+      new Notification(title, {
+        body,
+        silent: false,
+        vibrate: vibrate ? [120, 60, 120] : undefined,
+      });
     } catch {
       // ignore
     }
@@ -108,6 +197,8 @@ export function maybeNotifyBrowser(title, body) {
 }
 
 export function requestNotificationPermission() {
+  primeSoundSystem();
+  unlockSoundSystem();
   if (typeof window === "undefined" || typeof Notification === "undefined") return Promise.resolve("unsupported");
   if (Notification.permission !== "default") return Promise.resolve(Notification.permission);
   return Notification.requestPermission();

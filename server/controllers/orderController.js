@@ -10,9 +10,9 @@ const { verifyTableToken } = require("../utils/tableToken");
 const {
   upsertCustomerFromOrder,
   signCustomerCookie,
-  getCurrentCustomer,
 } = require("../controllers/customerController");
 const { normalizePhone } = require("../utils/phone");
+const { getClientIpKey } = require("../utils/clientIp");
 
 function normalizePaymentMode(value, fallback = "cash") {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -173,6 +173,8 @@ exports.createOrder = async (req, res) => {
     }
     const normalizedPhone = normalizePhone(String(phone));
     if (!normalizedPhone) return res.status(400).json({ message: "phone is required" });
+    const customerIpKey = getClientIpKey(req);
+    if (!customerIpKey) return res.status(400).json({ message: "Could not determine client IP" });
 
     const { resolvedItems, lineSubtotal } = await resolveOrderItems(cafeId, items);
     const { subtotalAmount, discountAmount, taxAmount, totalAmount } = computeOrderTotals(cafe, lineSubtotal);
@@ -182,6 +184,7 @@ exports.createOrder = async (req, res) => {
       cafeId,
       tableNumber,
       visitId: visit,
+      customerIpKey,
       customerName,
       phone: normalizedPhone,
       notes: typeof notes === "string" ? notes.trim() : "",
@@ -303,19 +306,14 @@ exports.listMyOrdersInCafe = async (req, res) => {
       return res.status(403).json({ message: "Invalid table token" });
     }
 
-    const current = await getCurrentCustomer(req);
-    if (current.status) return res.status(current.status).json({ message: current.message });
-
-    const normalized = normalizePhone(current.customer?.phone);
-    if (!normalized) return res.json([]);
-    const visitId = typeof req.query.visitId === "string" ? req.query.visitId.trim() : "";
+    const customerIpKey = getClientIpKey(req);
+    if (!customerIpKey) return res.json([]);
 
     const query = {
       cafeId,
       tableNumber: Number(tableNumber),
-      phone: normalized,
+      customerIpKey,
     };
-    if (visitId) query.visitId = visitId;
 
     const orders = await Order.find(query)
       .sort({ createdAt: -1 })
@@ -387,7 +385,20 @@ exports.createStaffOrder = async (req, res) => {
 exports.getOrderById = async (req, res) => {
   try {
     const { cafeId, id } = req.params;
-    const order = await Order.findOne({ _id: id, cafeId }).lean();
+    const tableNumber = req.query.tableNumber || req.query.table || "";
+    const token = req.query.t || req.query.tableToken || "";
+    const customerIpKey = getClientIpKey(req);
+    if (!tableNumber) return res.status(400).json({ message: "tableNumber is required" });
+    if (!verifyTableToken(cafeId, tableNumber, token)) {
+      return res.status(403).json({ message: "Invalid table token" });
+    }
+    if (!customerIpKey) return res.status(403).json({ message: "Could not determine client IP" });
+    const order = await Order.findOne({
+      _id: id,
+      cafeId,
+      tableNumber: Number(tableNumber),
+      customerIpKey,
+    }).lean();
     if (!order) return res.status(404).json({ message: "Order not found" });
     return res.json(order);
   } catch (error) {
