@@ -245,7 +245,6 @@ Default local credentials created by the seed script:
 
 | Role | Username | Password |
 | --- | --- | --- |
-| Super Admin | `superadmin` | `SuperAdmin@123` |
 | Cafe Admin | `admin` | `Admin@123` |
 | Kitchen | `chef` | `Chef@123` |
 | Waiter | `waiter` | `Waiter@123` |
