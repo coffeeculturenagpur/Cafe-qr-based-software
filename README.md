@@ -1,184 +1,342 @@
 # QRDine
 
-A QR-based restaurant ordering system with a premium guest flow, real-time kitchen updates, and role-based staff dashboards. Guests scan a QR, browse menus, place orders, and track status while the kitchen and staff see live updates.
+<p align="center">
+  <strong>QR-based cafe ordering software with live kitchen flow, staff dashboards, analytics, and branded customer experiences.</strong>
+</p>
 
-## Quick Links
-- [Overview](#overview)
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Roles And Screens](#roles-and-screens)
-- [Architecture](#architecture)
-- [Getting Started](#getting-started)
-- [Environment Variables](#environment-variables)
-- [Scripts](#scripts)
-- [API Surface](#api-surface)
-- [Realtime Events](#realtime-events)
-- [Project Structure](#project-structure)
-- [Troubleshooting](#troubleshooting)
+<p align="center">
+  <img src="https://img.shields.io/badge/Frontend-Next.js_16-black?style=for-the-badge&logo=next.js" alt="Next.js 16 badge" />
+  <img src="https://img.shields.io/badge/Backend-Express_5-111827?style=for-the-badge&logo=express" alt="Express 5 badge" />
+  <img src="https://img.shields.io/badge/Database-MongoDB-166534?style=for-the-badge&logo=mongodb" alt="MongoDB badge" />
+  <img src="https://img.shields.io/badge/Realtime-Socket.IO-1f2937?style=for-the-badge&logo=socketdotio" alt="Socket.IO badge" />
+  <img src="https://img.shields.io/badge/Media-Cloudinary-1d4ed8?style=for-the-badge&logo=cloudinary" alt="Cloudinary badge" />
+</p>
+
+---
 
 ## Overview
-QRDine streamlines the in-cafe ordering experience. Customers open a cafe-specific menu by scanning a QR code. Orders flow to the kitchen instantly, while staff dashboards show table status, order progress, and payment state.
 
-## Features
-- QR-based guest entry into cafe-specific menus
-- Customer ordering flow with table association
-- Real-time order updates (Socket.io)
-- Role-based staff experiences (super admin, cafe admin, kitchen/chef, waiter)
-- Menu and media management with Cloudinary
-- Table status tracking (free, reserved, served, paid)
-- OTP verification endpoints for phone-based flows
-- Cafe configuration and multi-cafe support
+QRDine is a full-stack cafe and restaurant ordering platform built around the table QR workflow.
 
-## Tech Stack
-- Frontend: Next.js 14, React 18, Tailwind CSS
-- Backend: Node.js, Express, MongoDB (Mongoose)
-- Realtime: Socket.io
-- Media: Cloudinary
-- Auth: JWT
+Customers scan a table QR, enter the cafe menu, add items to cart, place an order, and track it live. At the same time, waiters, kitchen staff, cafe admins, and super admins each get their own focused workspace to manage service, operations, and analytics.
 
-## Roles And Screens
-- Guest: QR scan, browse menu, place order, track status
-- Cafe Admin: menu, tables, staff, and cafe settings
-- Kitchen/Chef: live order queue and status updates
-- Waiter/Staff: table view and order lifecycle
-- Super Admin: multi-cafe oversight
+This repository includes:
 
-Tip: The marketing-style landing page lives at `next-frontend/app/page.js` and can be customized per brand.
+- A branded Next.js frontend with separate customer and staff experiences
+- An Express + MongoDB backend with role-based APIs
+- Realtime order broadcasting using Socket.IO
+- QR generation and secure table-token validation
+- Admin tools for menu uploads, table setup, staff creation, and cafe customization
+
+## Why This Project Stands Out
+
+- Table-first ordering flow instead of generic delivery-style checkout
+- Multi-role product surface: customer, waiter, kitchen, cafe admin, super admin
+- Live order status updates for both staff and guests
+- Branded marketing/landing experience for the cafe itself
+- Menu management with image uploads and CSV bulk import
+- Built-in analytics, order history, customer favorites, and payment support
+
+## Core Features
+
+### Customer Experience
+
+- QR-based entry into a cafe-specific menu
+- Table-aware browsing, cart, and checkout flow
+- Live order tracking page with realtime updates
+- Customer session persistence tied to short-lived secure cookies
+- Favorite items surfaced after prior completed orders
+- Table guard protection so guests must use valid QR/table links
+- UPI QR support on the order status screen
+
+### Staff Experience
+
+- Waiter dashboard with live incoming orders and readiness updates
+- Kitchen dashboard for preparation flow and order progression
+- Admin dashboard for menu, tables, cafe settings, analytics, and staff management
+- Super admin dashboard for multi-cafe control and cross-cafe analytics
+- Dedicated order history pages for waiter, kitchen, and admin workflows
+- Sound and browser-notification helpers for faster staff response
+
+### Admin and Operations
+
+- Create and manage cafes
+- Create and manage tables
+- Generate table QR links and QR code assets
+- Upload menu images through Cloudinary
+- Bulk preview and upload menu items from CSV
+- Configure taxes, discounts, branding, colors, and venue metadata
+- Maintain showcase highlights, community notes, and non-smoking gallery images
+- Seed demo users for local development
+
+### Platform and Security
+
+- JWT authentication for staff users
+- OTP request and verify endpoints for phone-based flows
+- Secure table token signing and verification
+- Tenant-aware socket room access for staff
+- CORS allowlist support for local and deployed environments
+- Health check endpoints for frontend and backend
+
+## Product Surfaces
+
+| Surface | Path |
+| --- | --- |
+| Marketing / cafe showcase | `/` |
+| Universal login | `/login` |
+| Customer cafe entry | `/:cafeId` |
+| Customer menu | `/:cafeId/menu` |
+| Customer cart | `/:cafeId/cart` |
+| Customer orders | `/:cafeId/orders` |
+| Customer order tracking | `/:cafeId/order/:orderId` |
+| Waiter dashboard | `/waiter` |
+| Kitchen dashboard | `/kitchen` |
+| Cafe admin dashboard | `/admin/menu` |
+| Super admin dashboard | `/super-admin` |
+
+## Role Matrix
+
+| Role | Main Capabilities |
+| --- | --- |
+| Customer | Browse menu, place table order, track status live, revisit favorites |
+| Staff / Waiter | Watch active orders, handle service flow, review history |
+| Kitchen | Manage prep queue, update statuses, review completed history |
+| Cafe Admin | Manage menu, QR tables, media, branding, analytics, staff accounts |
+| Super Admin | Manage cafes, view overview metrics, inspect system-wide analytics |
 
 ## Architecture
+
 ```mermaid
 graph TD
-  Guest[Guest QR Scan] --> Web[Next.js Frontend]
-  Staff[Staff Dashboards] --> Web
-  Web -->|REST| API[Express API]
-  Web -->|Socket.io| Realtime[Realtime Events]
-  API --> DB[(MongoDB)]
-  API --> Media[Cloudinary]
-  Realtime --> Web
+  Guest[Customer scans table QR] --> Frontend[Next.js app]
+  Waiter[Waiter dashboard] --> Frontend
+  Kitchen[Kitchen dashboard] --> Frontend
+  Admin[Cafe admin dashboard] --> Frontend
+  SuperAdmin[Super admin dashboard] --> Frontend
+
+  Frontend -->|REST API| Backend[Express server]
+  Frontend -->|Socket.IO| Realtime[Realtime event layer]
+
+  Backend --> DB[(MongoDB)]
+  Backend --> Cloudinary[Cloudinary media storage]
+  Realtime --> Frontend
 ```
 
-## Getting Started
-### Prerequisites
-- Node.js 18+
-- MongoDB (local or Atlas)
+## Tech Stack
 
-### Install
+| Layer | Stack |
+| --- | --- |
+| Frontend | Next.js 16, React 18, Tailwind CSS, Framer Motion, Recharts |
+| Backend | Node.js, Express 5, MongoDB, Mongoose |
+| Realtime | Socket.IO |
+| Media | Cloudinary, Multer, Sharp |
+| Auth | JWT, cookie-based customer sessions, OTP endpoints |
+| Utilities | QRCode generation, CSV parsing |
+
+## Repository Structure
+
+```text
+.
+|-- next-frontend
+|   |-- app
+|   |-- components
+|   |-- lib
+|   |-- public
+|   `-- test
+|-- server
+|   |-- config
+|   |-- controllers
+|   |-- middleware
+|   |-- models
+|   |-- realtime
+|   |-- routes
+|   |-- scripts
+|   |-- test
+|   `-- utils
+`-- README.md
+```
+
+## Local Setup
+
+### 1. Install dependencies
+
 ```bash
-# Frontend
 cd next-frontend
 npm install
 
-# Backend
 cd ../server
 npm install
 ```
 
-### Run
+### 2. Configure environment variables
+
+Create these files before running locally.
+
+#### Frontend: `next-frontend/.env.local`
+
+```env
+NEXT_PUBLIC_API_BASE_URL=http://localhost:5000
+NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+NEXT_PUBLIC_CUSTOMER_APP_URL=http://localhost:3000
+NEXT_PUBLIC_SHOWCASE_CAFE_ID=optional_showcase_cafe_id
+NEXT_PUBLIC_VENUE_ID=optional_fallback_showcase_cafe_id
+```
+
+#### Backend: `server/.env`
+
+```env
+MONGODB_URI=your_mongodb_connection_string
+PORT=5000
+JWT_SECRET=your_jwt_secret
+CUSTOMER_JWT_SECRET=optional_customer_session_secret
+TABLE_QR_SECRET=optional_table_qr_secret
+CORS_ORIGINS=http://localhost:3000,http://localhost:5000
+CUSTOMER_BASE_URL=http://localhost:3000
+
+CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+CLOUDINARY_API_KEY=your_cloudinary_api_key
+CLOUDINARY_API_SECRET=your_cloudinary_api_secret
+CLOUDINARY_URL=cloudinary://<key>:<secret>@<cloud_name>
+
+OTP_TTL_SECONDS=300
+OTP_MAX_ATTEMPTS=5
+DEFAULT_CAFE_ID=optional_default_cafe_id
+NODE_ENV=development
+```
+
+## Running The App
+
+### Backend
+
 ```bash
-# Backend (API)
 cd server
 npm run start
+```
 
-# Frontend (Next.js)
-cd ../next-frontend
+Runs on `http://localhost:5000`
+
+### Frontend
+
+```bash
+cd next-frontend
 npm run dev
 ```
 
-Open `http://localhost:3000` for the frontend and `http://localhost:5000` for the API.
+Runs on `http://localhost:3000`
 
-### Seed Demo Users
+## Seed Demo Accounts
+
 ```bash
 cd server
 npm run seed:users
 ```
-The seed script creates demo users for local testing and prints credentials. Change these before production use.
 
-## Environment Variables
-Create your environment files using the templates below.
+Default local credentials created by the seed script:
 
-### Frontend (`next-frontend/.env.local`)
-```
-NEXT_PUBLIC_API_BASE_URL=http://localhost:5000
-NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=your_cloud_name_here
-# Canonical URL where guests open the ordering app (table QR links). Optional if you only save it per café in admin.
-NEXT_PUBLIC_CUSTOMER_APP_URL=https://your-customer-facing-domain.example
-```
-
-### Backend (`server/.env`)
-```
-MONGODB_URI=your_mongodb_connection_string
-PORT=5000
-JWT_SECRET=your_jwt_secret
-
-# Cloudinary
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_cloud_key
-CLOUDINARY_API_SECRET=your_cloud_secret
-CLOUDINARY_URL=cloudinary://<key>:<secret>@<cloud_name>
-
-# OTP settings
-OTP_TTL_SECONDS=300
-OTP_MAX_ATTEMPTS=5
-```
-
-Security note: Do not commit real secrets. Keep production credentials in a secret manager.
+| Role | Username | Password |
+| --- | --- | --- |
+| Super Admin | `superadmin` | `SuperAdmin@123` |
+| Cafe Admin | `admin` | `Admin@123` |
+| Kitchen | `chef` | `Chef@123` |
+| Waiter | `waiter` | `Waiter@123` |
 
 ## Scripts
-### Frontend (`next-frontend/package.json`)
-- `npm run dev` - start Next.js dev server
-- `npm run build` - build for production
-- `npm run start` - run production build
-- `npm run lint` - run linter
 
-### Backend (`server/package.json`)
-- `npm run start` - start API with Nodemon
-- `npm run seed:users` - seed demo users
+### Frontend
 
-## API Surface
-Base paths used by the backend:
-- `POST /api/auth/login` and `POST /api/auth/register`
-- `POST /api/auth/otp/request` and `POST /api/auth/otp/verify`
-- `GET /api/menu` and menu filters
-- `GET /api/cafe/:id` for cafe details
-- `POST /api/orders` and `PATCH /api/orders/:id`
-- `GET /api/orders/cafe/:cafeId` and `GET /api/orders/table/:cafeId/:tableNumber`
-- Admin: `/api/admin/*` and `/api/superadmin/*`
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start local Next.js dev server |
+| `npm run build` | Build production frontend |
+| `npm run start` | Run production frontend |
+| `npm run lint` | Run linting |
+| `npm run test` | Run frontend tests |
 
-See the `server/routes` folder for full route definitions.
+### Backend
+
+| Command | Purpose |
+| --- | --- |
+| `npm run start` | Start backend server |
+| `npm run seed:users` | Seed local demo users |
+| `npm run test` | Run backend tests |
+
+## API Overview
+
+### Public and customer routes
+
+- `POST /api/auth/login`
+- `POST /api/auth/register`
+- `POST /api/auth/otp/request`
+- `POST /api/auth/otp/verify`
+- `GET /api/menu/:cafeId`
+- `GET /api/cafe/:id`
+- `POST /api/orders`
+- `GET /api/orders/:cafeId/mine`
+- `GET /api/orders/:cafeId/table/:tableNumber`
+- `GET /api/orders/:cafeId/id/:id`
+- `GET /api/customers/me`
+- `GET /api/customers/me/favorites`
+- `GET /api/qr/table`
+- `GET /api/qr/verify`
+- `GET /api/qr/token`
+
+### Admin routes
+
+- `/api/admin/menu`
+- `/api/admin/tables`
+- `/api/admin/users`
+- `/api/admin/media`
+- `/api/admin/cafe`
+- `/api/superadmin`
+
+For the full route surface, see the `server/routes` directory.
 
 ## Realtime Events
-Socket rooms are per-cafe. The frontend joins using `JOIN_CAFE` with `{ cafeId }`. Staff dashboards send a JWT in the Socket.io `auth` handshake so the server only allows joining rooms for that user?s cafe; guest customers connect without a token (live order updates only).
 
-Emitted events:
+Socket rooms are scoped by cafe. Staff members join with JWT-backed auth; guest clients can join cafe rooms for order-status updates.
+
+Main events:
+
 - `NEW_ORDER`
 - `ORDER_UPDATED`
 - `ORDER_READY`
 - `ORDER_PAID`
+- `JOIN_ERROR`
 
-## Project Structure
-```
-.
-+-- next-frontend
-?   +-- app
-?   +-- components
-?   +-- lib
-?   +-- public
-+-- server
-?   +-- config
-?   +-- controllers
-?   +-- models
-?   +-- realtime
-?   +-- routes
-?   +-- services
-+-- README.md
+## Deployment Notes
+
+- Frontend is prepared for environment-based API configuration through `NEXT_PUBLIC_API_BASE_URL`
+- QR links can point to a dedicated customer domain using `NEXT_PUBLIC_CUSTOMER_APP_URL` or cafe-level overrides
+- Backend CORS can be expanded with `CORS_ORIGINS`
+- Cloudinary support is already wired for hosted media
+- `manifest.json` and `sw.js` are present for a lightweight installable web-app base
+
+## Testing
+
+This repo already includes:
+
+- Frontend tests for visit-session behavior
+- Backend tests for customer session token rules
+
+Run them with:
+
+```bash
+cd next-frontend
+npm run test
+
+cd ../server
+npm run test
 ```
 
-## Troubleshooting
-- Netlify usage limits: open **Netlify → your site → Usage** and check whether counts map to **Image transforms** (often from `next/image` on remote URLs), **Functions**, or another category—then optimize that path (e.g. `unoptimized` or static assets for images you do not need resized).
-- Auth error about missing JWT: set `JWT_SECRET` and ensure `jsonwebtoken` is installed in `server`.
-- Realtime not working: ensure `socket.io` is installed and the frontend connects to the same API base URL.
-- Cloudinary images not loading: confirm `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` and Cloudinary keys on the backend.
+## Good Fit For
+
+- Cafes with QR-based dine-in ordering
+- Multi-role restaurant operations
+- Branded cafe websites that still connect to live in-venue service
+- Teams that want one codebase for guest flow and staff flow
 
 ---
 
-Built for smooth table service and faster turnarounds.
+<p align="center">
+  Built for faster table service, clearer kitchen coordination, and a more premium in-cafe ordering experience.
+</p>
