@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "./api";
 import { getTableSession, setTableSession } from "./tableSession";
+import { fetchSessionRestore } from "./sessionRestore";
 
 export function useTableGuard({
   cafeId,
@@ -25,9 +26,33 @@ export function useTableGuard({
         router.replace(redirectTo(session.tableNumber, session.token));
         return;
       }
-      setStatus("error");
-      setError("Invalid or missing table link. Please scan the table QR again.");
-      return;
+
+      let cancelled = false;
+      setStatus("checking");
+      setError("");
+
+      (async () => {
+        try {
+          const restored = await fetchSessionRestore(cafeId);
+          if (cancelled) return;
+          const tableContext = restored?.tableContext;
+          if (tableContext?.tableNumber && tableContext?.token && redirectTo) {
+            setTableSession(cafeId, tableContext.tableNumber, tableContext.token);
+            router.replace(redirectTo(tableContext.tableNumber, tableContext.token));
+            return;
+          }
+          setStatus("error");
+          setError("Invalid or missing table link. Please scan the table QR again.");
+        } catch (e) {
+          if (cancelled) return;
+          setStatus("error");
+          setError(e?.message || "Invalid or missing table link. Please scan the table QR again.");
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (

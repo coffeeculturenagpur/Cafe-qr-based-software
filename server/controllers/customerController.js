@@ -8,6 +8,7 @@ const {
   signCustomerToken,
   verifyCustomerToken,
 } = require("../utils/customerSession");
+const { linkSessionCustomer } = require("../services/sessionStore");
 
 function customerSecret() {
   return process.env.CUSTOMER_JWT_SECRET || process.env.JWT_SECRET;
@@ -58,6 +59,7 @@ exports.getFavorites = async (req, res) => {
     if (current.status) return res.status(current.status).json({ message: current.message });
     const { customer } = current;
     exports.signCustomerCookie(res, customer, req);
+    await linkSessionCustomer(req.sessionId || "", customer._id);
 
     const normalized = normalizePhone(customer.phone);
     if (!normalized) return res.json({ items: [] });
@@ -116,6 +118,7 @@ exports.getMe = async (req, res) => {
     if (current.status) return res.status(current.status).json({ message: current.message });
     const { customer } = current;
     exports.signCustomerCookie(res, customer, req);
+    await linkSessionCustomer(req.sessionId || "", customer._id);
     return res.json({
       id: String(customer._id),
       name: customer.name,

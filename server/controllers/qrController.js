@@ -5,6 +5,7 @@ const QRCode = require("qrcode");
 const sharp = require("sharp");
 const Cafe = require("../models/Cafe");
 const { signTableToken, verifyTableToken } = require("../utils/tableToken");
+const { upsertSessionState, getSessionStoreMode } = require("../services/sessionStore");
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -136,7 +137,13 @@ exports.verifyTableToken = async (req, res) => {
     const ok = verifyTableToken(cafeId, num, t);
     if (!ok) return res.status(400).json({ message: "Invalid table token" });
 
-    return res.json({ valid: true });
+    await upsertSessionState({
+      sessionId: req.sessionId || "",
+      cafeId,
+      tableNumber: num,
+    });
+
+    return res.json({ valid: true, sessionStore: getSessionStoreMode() });
   } catch (error) {
     return res.status(500).json({ message: "Server error", error });
   }

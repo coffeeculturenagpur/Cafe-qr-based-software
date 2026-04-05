@@ -10,6 +10,7 @@ const adminMenuRoutes = require('./routes/adminMenuRoutes');
 const adminTableRoutes = require('./routes/adminTableRoutes');
 const superAdminRoutes = require('./routes/superAdminRoutes');
 const customerRoutes = require('./routes/customerRoutes');
+const sessionRoutes = require('./routes/sessionRoutes');
 const adminUserRoutes = require('./routes/adminUserRoutes');
 const adminMediaRoutes = require('./routes/adminMediaRoutes');
 const adminCafeRoutes = require('./routes/adminCafeRoutes');
@@ -17,9 +18,20 @@ const qrRoutes = require('./routes/qrRoutes');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const { initSocket } = require('./realtime/socket');
+const { ensureSessionId } = require('./utils/sessionIdentity');
+const { initSessionStore, getSessionStoreMode } = require('./services/sessionStore');
 
 dotenv.config();
 connectDB();
+initSessionStore()
+  .then(({ mode }) => {
+    // eslint-disable-next-line no-console
+    console.log(`Session store initialized in ${mode} mode`);
+  })
+  .catch((error) => {
+    // eslint-disable-next-line no-console
+    console.warn(`Session store initialization failed, using ${getSessionStoreMode()} mode:`, error.message);
+  });
 
 const app = express();
 app.set("trust proxy", 1);
@@ -55,6 +67,10 @@ app.use(
   })
 );
 app.use(cookieParser());
+app.use((req, res, next) => {
+  ensureSessionId(req, res);
+  next();
+});
 app.use(express.json());
 
 const server = http.createServer(app);
@@ -66,6 +82,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/cafe', cafeRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/customers', customerRoutes);
+app.use('/api/session', sessionRoutes);
 app.use('/api/admin/menu', adminMenuRoutes);
 app.use('/api/admin/tables', adminTableRoutes);
 app.use('/api/superadmin', superAdminRoutes);

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { apiFetch } from "../../lib/api";
 import { setTableSession } from "../../lib/tableSession";
 import { getCafeWithCache } from "../../lib/cafeClient";
+import { fetchSessionRestore } from "../../lib/sessionRestore";
 
 export default function CafeEntryPage() {
   const router = useRouter();
@@ -53,24 +54,33 @@ export default function CafeEntryPage() {
 
   useEffect(() => {
     if (splash) return;
-    if (!tableNumber) {
-      setError("Missing table number (?table=1)");
-      return;
-    }
-    if (!tableToken) {
-      setError("Invalid table link. Please scan the table QR again.");
-      return;
-    }
     if (!cafeId) return;
     (async () => {
       try {
-        await apiFetch(
-          `/api/qr/verify?cafeId=${encodeURIComponent(cafeId)}&tableNumber=${encodeURIComponent(
-            tableNumber
-          )}&t=${encodeURIComponent(tableToken)}`
-        );
-        setTableSession(cafeId, tableNumber, tableToken);
-        router.replace(`/${cafeId}/menu?table=${tableNumber}&t=${encodeURIComponent(tableToken)}`);
+        if (tableNumber && tableToken) {
+          await apiFetch(
+            `/api/qr/verify?cafeId=${encodeURIComponent(cafeId)}&tableNumber=${encodeURIComponent(
+              tableNumber
+            )}&t=${encodeURIComponent(tableToken)}`
+          );
+          setTableSession(cafeId, tableNumber, tableToken);
+          router.replace(`/${cafeId}/menu?table=${tableNumber}&t=${encodeURIComponent(tableToken)}`);
+          return;
+        }
+
+        const restored = await fetchSessionRestore(cafeId);
+        const tableContext = restored?.tableContext;
+        if (tableContext?.tableNumber && tableContext?.token) {
+          setTableSession(cafeId, tableContext.tableNumber, tableContext.token);
+          router.replace(`/${cafeId}/menu?table=${tableContext.tableNumber}&t=${encodeURIComponent(tableContext.token)}`);
+          return;
+        }
+
+        if (!tableNumber) {
+          setError("Missing table number (?table=1)");
+          return;
+        }
+        setError("Invalid table link. Please scan the table QR again.");
       } catch (e) {
         setError(e?.message || "Invalid table link. Please scan the table QR again.");
       }

@@ -1,5 +1,7 @@
 const { canAccessCafe } = require("../utils/tenant");
 const { getUserFromSocketToken } = require("../utils/jwtUser");
+const { verifyCustomerToken, CUSTOMER_COOKIE_NAME } = require("../utils/customerSession");
+const { readSessionId, parseCookieHeader } = require("../utils/sessionIdentity");
 
 let io = null;
 
@@ -9,6 +11,33 @@ const ROLE_ROOMS = {
   cafe_admin: "cafe_admin",
   super_admin: "super_admin",
 };
+
+function getCustomerSecret() {
+  return process.env.CUSTOMER_JWT_SECRET || process.env.JWT_SECRET;
+}
+
+function joinCustomerIdentityRooms(socket) {
+  const sessionId = readSessionId({ headers: socket.handshake.headers });
+  if (sessionId) {
+    socket.join(`session:${sessionId}`);
+  }
+
+  const cookies = parseCookieHeader(socket.handshake.headers?.cookie || "");
+  const customerToken = cookies[CUSTOMER_COOKIE_NAME];
+  if (!customerToken) return;
+
+  try {
+    const verified = verifyCustomerToken({
+      token: customerToken,
+      secret: getCustomerSecret(),
+    });
+    if (verified?.payload?.sub) {
+      socket.join(`customer:${String(verified.payload.sub)}`);
+    }
+  } catch {
+    // Ignore expired/invalid customer sessions for guest sockets.
+  }
+}
 
 function initSocket(httpServer) {
   try {
@@ -22,6 +51,8 @@ function initSocket(httpServer) {
     });
 
     io.on("connection", (socket) => {
+      joinCustomerIdentityRooms(socket);
+
       socket.on("JOIN_CAFE", async ({ cafeId }) => {
         if (!cafeId) return;
         const token =
@@ -72,6 +103,15 @@ function emitToRole(cafeId, role, event, payload) {
 function emitCafeEvent(cafeId, event, payload) {
   if (!io || !cafeId) return;
   const id = String(cafeId);
+  const sessionId = payload?.sessionId ? String(payload.sessionId) : "";
+  const customerId = payload?.customerId ? String(payload.customerId) : "";
+
+  if (sessionId) {
+    io.to(`session:${sessionId}`).emit(event, payload);
+  }
+  if (customerId) {
+    io.to(`customer:${customerId}`).emit(event, payload);
+  }
 
   if (event === "NEW_ORDER") {
     emitToRole(id, ROLE_ROOMS.kitchen, event, payload);

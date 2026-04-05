@@ -10,9 +10,14 @@ const { verifyTableToken } = require("../utils/tableToken");
 const {
   upsertCustomerFromOrder,
   signCustomerCookie,
+  getCurrentCustomer,
 } = require("../controllers/customerController");
 const { normalizePhone } = require("../utils/phone");
-const { getClientIpKey } = require("../utils/clientIp");
+const {
+  attachOrderToSession,
+  getTrackedOrderIds,
+  upsertSessionState,
+} = require("../services/sessionStore");
 
 function normalizePaymentMode(value, fallback = "cash") {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -107,6 +112,13 @@ async function buildResolvedOrderPayload(cafeId, items) {
   return { cafe, resolvedItems, subtotalAmount, discountAmount, taxAmount, totalAmount };
 }
 
+function buildCustomerOrderOwnershipQuery({ sessionId, customerId }) {
+  const ownership = [];
+  if (sessionId) ownership.push({ sessionId });
+  if (customerId) ownership.push({ customerId });
+  return ownership;
+}
+
 exports.listOrdersByTableVenue = async (req, res) => {
   const cafeId = process.env.DEFAULT_CAFE_ID;
   if (!cafeId) {
@@ -173,8 +185,13 @@ exports.createOrder = async (req, res) => {
     }
     const normalizedPhone = normalizePhone(String(phone));
     if (!normalizedPhone) return res.status(400).json({ message: "phone is required" });
-    const customerIpKey = getClientIpKey(req);
-    if (!customerIpKey) return res.status(400).json({ message: "Could not determine client IP" });
+    const sessionId = req.sessionId || "";
+    const linkedCustomer = await upsertCustomerFromOrder({
+      phone: normalizedPhone,
+      name: customerName,
+      tableNumber,
+      cafeId,
+    });
 
     const { resolvedItems, lineSubtotal } = await resolveOrderItems(cafeId, items);
     const { subtotalAmount, discountAmount, taxAmount, totalAmount } = computeOrderTotals(cafe, lineSubtotal);
@@ -184,7 +201,8 @@ exports.createOrder = async (req, res) => {
       cafeId,
       tableNumber,
       visitId: visit,
-      customerIpKey,
+      sessionId,
+      customerId: linkedCustomer?._id || null,
       customerName,
       phone: normalizedPhone,
       notes: typeof notes === "string" ? notes.trim() : "",
@@ -206,13 +224,14 @@ exports.createOrder = async (req, res) => {
     emitCafeEvent(order.cafeId, "NEW_ORDER", order);
 
     try {
-      const cust = await upsertCustomerFromOrder({
-        phone: normalizedPhone,
-        name: customerName,
-        tableNumber,
+      await attachOrderToSession({
+        sessionId,
+        customerId: linkedCustomer?._id || null,
         cafeId,
+        tableNumber,
+        orderId: order._id,
       });
-      if (cust) signCustomerCookie(res, cust, req);
+      if (linkedCustomer) signCustomerCookie(res, linkedCustomer, req);
     } catch {
       // non-fatal
     }
@@ -306,18 +325,32 @@ exports.listMyOrdersInCafe = async (req, res) => {
       return res.status(403).json({ message: "Invalid table token" });
     }
 
-    const customerIpKey = getClientIpKey(req);
-    if (!customerIpKey) return res.json([]);
+    const sessionId = req.sessionId || "";
+    const current = await getCurrentCustomer(req).catch(() => null);
+    const customerId = current?.customer?._id || null;
+    const ownership = buildCustomerOrderOwnershipQuery({ sessionId, customerId });
+    if (ownership.length === 0) return res.json([]);
+    const trackedOrderIds = await getTrackedOrderIds({ sessionId, customerId });
 
     const query = {
       cafeId,
       tableNumber: Number(tableNumber),
-      customerIpKey,
+      $or: ownership,
     };
+    if (trackedOrderIds.length > 0) {
+      query._id = { $in: trackedOrderIds };
+    }
 
     const orders = await Order.find(query)
       .sort({ createdAt: -1 })
       .lean();
+
+    await upsertSessionState({
+      sessionId,
+      cafeId,
+      tableNumber: Number(tableNumber),
+      customerId: customerId ? String(customerId) : null,
+    });
 
     return res.json(orders);
   } catch (error) {
@@ -387,17 +420,22 @@ exports.getOrderById = async (req, res) => {
     const { cafeId, id } = req.params;
     const tableNumber = req.query.tableNumber || req.query.table || "";
     const token = req.query.t || req.query.tableToken || "";
-    const customerIpKey = getClientIpKey(req);
     if (!tableNumber) return res.status(400).json({ message: "tableNumber is required" });
     if (!verifyTableToken(cafeId, tableNumber, token)) {
       return res.status(403).json({ message: "Invalid table token" });
     }
-    if (!customerIpKey) return res.status(403).json({ message: "Could not determine client IP" });
+    const sessionId = req.sessionId || "";
+    const current = await getCurrentCustomer(req).catch(() => null);
+    const customerId = current?.customer?._id || null;
+    const ownership = buildCustomerOrderOwnershipQuery({ sessionId, customerId });
+    if (ownership.length === 0) {
+      return res.status(403).json({ message: "Could not determine customer session" });
+    }
     const order = await Order.findOne({
       _id: id,
       cafeId,
       tableNumber: Number(tableNumber),
-      customerIpKey,
+      $or: ownership,
     }).lean();
     if (!order) return res.status(404).json({ message: "Order not found" });
     return res.json(order);

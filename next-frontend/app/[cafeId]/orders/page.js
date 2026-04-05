@@ -100,8 +100,12 @@ export default function OrdersPage() {
       if (!payload?._id) return;
       if (String(payload.tableNumber || "") !== String(tableNumber || "")) return;
       setOrders((prev) => {
-        const knownIpKey = prev[0]?.customerIpKey || "";
-        if (knownIpKey && payload.customerIpKey !== knownIpKey) return prev;
+        const knownSessionId = prev[0]?.sessionId || "";
+        const knownCustomerId = prev[0]?.customerId || "";
+        if (knownSessionId && payload.sessionId && payload.sessionId !== knownSessionId) return prev;
+        if (!knownSessionId && knownCustomerId && payload.customerId && payload.customerId !== knownCustomerId) {
+          return prev;
+        }
         playCustomerStatus();
         setStatusToast(`Order ${String(payload._id).slice(-6)} · ${payload.status || "updated"}`);
         setTimeout(() => setStatusToast(""), 5000);

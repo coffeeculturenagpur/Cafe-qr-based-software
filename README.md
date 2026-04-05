@@ -72,7 +72,7 @@ This repository includes:
 ### Platform and Security
 
 - JWT authentication for staff users
-- OTP request and verify endpoints for phone-based flows
+- Optional OTP request and verify endpoints for future phone-based flows
 - Secure table token signing and verification
 - Tenant-aware socket room access for staff
 - CORS allowlist support for local and deployed environments
@@ -130,7 +130,7 @@ graph TD
 | Backend | Node.js, Express 5, MongoDB, Mongoose |
 | Realtime | Socket.IO |
 | Media | Cloudinary, Multer, Sharp |
-| Auth | JWT, cookie-based customer sessions, OTP endpoints |
+| Auth | JWT, cookie-based customer sessions, optional future-ready OTP endpoints |
 | Utilities | QRCode generation, CSV parsing |
 
 ## Repository Structure
@@ -198,10 +198,20 @@ CLOUDINARY_API_KEY=your_cloudinary_api_key
 CLOUDINARY_API_SECRET=your_cloudinary_api_secret
 CLOUDINARY_URL=cloudinary://<key>:<secret>@<cloud_name>
 
+DEFAULT_CAFE_ID=optional_default_cafe_id
+REDIS_URL=optional_redis_connection_string
+SESSION_TTL_SECONDS=21600
+CUSTOMER_ORDER_TTL_SECONDS=604800
+SESSION_ORDER_LIMIT=20
+CUSTOMER_ORDER_LIMIT=10
+NODE_ENV=development
+```
+
+Optional only, not required for the current customer ordering flow:
+
+```env
 OTP_TTL_SECONDS=300
 OTP_MAX_ATTEMPTS=5
-DEFAULT_CAFE_ID=optional_default_cafe_id
-NODE_ENV=development
 ```
 
 ## Running The App
@@ -276,6 +286,7 @@ Default local credentials created by the seed script:
 - `GET /api/orders/:cafeId/id/:id`
 - `GET /api/customers/me`
 - `GET /api/customers/me/favorites`
+- `GET /api/session/me`
 - `GET /api/qr/table`
 - `GET /api/qr/verify`
 - `GET /api/qr/token`
@@ -309,6 +320,7 @@ Main events:
 - QR links can point to a dedicated customer domain using `NEXT_PUBLIC_CUSTOMER_APP_URL` or cafe-level overrides
 - Backend CORS can be expanded with `CORS_ORIGINS`
 - Cloudinary support is already wired for hosted media
+- Redis is optional but recommended for cross-instance session restore and hot order/session caching via `REDIS_URL`
 - `manifest.json` and `sw.js` are present for a lightweight installable web-app base
 
 ## Testing
