@@ -34,6 +34,11 @@ const statusRank = (status) => {
   return 0;
 };
 
+function orderIncludesLaterItems(order) {
+  if (!order?.updatedAt || !order?.createdAt) return false;
+  return new Date(order.updatedAt).getTime() - new Date(order.createdAt).getTime() > 60 * 1000;
+}
+
 export default function OrderStatusPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -41,6 +46,8 @@ export default function OrderStatusPage() {
   const orderId = params.orderId;
   const tableNumber = useMemo(() => searchParams.get("table"), [searchParams]);
   const tableToken = useMemo(() => searchParams.get("t") || "", [searchParams]);
+  const mergedNotice = useMemo(() => searchParams.get("merged") === "1", [searchParams]);
+  const addedItemCount = useMemo(() => Number(searchParams.get("added") || 0), [searchParams]);
   const router = useRouter();
 
   const [order, setOrder] = useState(null);
@@ -218,6 +225,14 @@ export default function OrderStatusPage() {
           <span>Live updates: <span className="font-semibold">{socketState}</span></span>
         </div>
 
+        {mergedNotice && (
+          <div className="mt-3 rounded-3xl border border-emerald-200 bg-emerald-50/85 p-4 text-sm text-emerald-950 shadow-sm">
+            {addedItemCount > 0
+              ? `${addedItemCount} more item${addedItemCount === 1 ? "" : "s"} added to your existing order.`
+              : "Your new items were added to your existing order."} Your final bill will stay combined for this table visit.
+          </div>
+        )}
+
         {error ? (
           <div className="mt-6 text-sm font-semibold text-red-700">{error}</div>
         ) : !order ? (
@@ -254,6 +269,12 @@ export default function OrderStatusPage() {
                   {order.status}
                 </div>
               </div>
+
+              {orderIncludesLaterItems(order) && (
+                <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+                  This tracker already includes items you added later from the same table visit.
+                </div>
+              )}
 
               <div className="mt-4 grid grid-cols-4 gap-2">
                 {displaySteps.map((step, idx) => {

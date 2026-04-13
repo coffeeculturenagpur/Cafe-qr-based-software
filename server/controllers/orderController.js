@@ -120,6 +120,67 @@ function buildCustomerOrderOwnershipQuery({ sessionId, customerId, visitId }) {
   return ownership;
 }
 
+function mergeOrderItems(existingItems, incomingItems) {
+  const merged = [];
+  const byKey = new Map();
+
+  const pushItem = (item) => {
+    const menuItemId = item?.menuItemId ? String(item.menuItemId) : "";
+    const fallbackKey = `${String(item?.name || "").trim().toLowerCase()}::${Number(item?.price || 0)}`;
+    const key = menuItemId || fallbackKey;
+    const qty = Number(item?.qty || 0);
+    if (!key || qty < 1) return;
+
+    const found = byKey.get(key);
+    if (found) {
+      found.qty += qty;
+      return;
+    }
+
+    const normalized = {
+      menuItemId: item?.menuItemId || null,
+      name: item?.name,
+      price: Number(item?.price || 0),
+      qty,
+    };
+    merged.push(normalized);
+    byKey.set(key, normalized);
+  };
+
+  for (const item of Array.isArray(existingItems) ? existingItems : []) pushItem(item);
+  for (const item of Array.isArray(incomingItems) ? incomingItems : []) pushItem(item);
+
+  return merged;
+}
+
+function sumOrderLineSubtotal(items) {
+  return (Array.isArray(items) ? items : []).reduce(
+    (sum, item) => sum + Number(item?.price || 0) * Number(item?.qty || 0),
+    0
+  );
+}
+
+function mergeOrderNotes(existingNotes, nextNotes) {
+  const current = typeof existingNotes === "string" ? existingNotes.trim() : "";
+  const incoming = typeof nextNotes === "string" ? nextNotes.trim() : "";
+  if (!incoming) return current;
+  if (!current) return incoming;
+  if (current === incoming) return current;
+  return `${current}\n${incoming}`;
+}
+
+async function findActiveOrderForMerge({ cafeId, tableNumber, sessionId, customerId, visitId }) {
+  const ownership = buildCustomerOrderOwnershipQuery({ sessionId, customerId, visitId });
+  if (ownership.length === 0) return null;
+
+  return Order.findOne({
+    cafeId,
+    tableNumber: Number(tableNumber),
+    status: { $nin: ["paid", "rejected"] },
+    $or: ownership,
+  }).sort({ createdAt: 1 });
+}
+
 exports.listOrdersByTableVenue = async (req, res) => {
   const cafeId = process.env.DEFAULT_CAFE_ID;
   if (!cafeId) {
@@ -195,34 +256,84 @@ exports.createOrder = async (req, res) => {
     });
 
     const { resolvedItems, lineSubtotal } = await resolveOrderItems(cafeId, items);
-    const { subtotalAmount, discountAmount, taxAmount, totalAmount } = computeOrderTotals(cafe, lineSubtotal);
     const paymentValue = normalizePaymentMode(paymentMode, "cash");
-
-    const order = await Order.create({
+    const activeOrder = await findActiveOrderForMerge({
       cafeId,
       tableNumber,
-      visitId: visit,
       sessionId,
       customerId: linkedCustomer?._id || null,
-      customerName,
-      phone: normalizedPhone,
-      notes: typeof notes === "string" ? notes.trim() : "",
-      items: resolvedItems,
-      subtotalAmount,
-      discountAmount,
-      taxAmount,
-      totalAmount,
-      paymentMode: paymentValue,
-      source: "qr",
-      status: "pending",
+      visitId: visit,
     });
+
+    let order;
+    let responseStatus = 201;
+    let emittedEvent = "NEW_ORDER";
+
+    if (activeOrder) {
+      const mergedItems = mergeOrderItems(activeOrder.items, resolvedItems);
+      const {
+        subtotalAmount,
+        discountAmount,
+        taxAmount,
+        totalAmount,
+      } = computeOrderTotals(cafe, sumOrderLineSubtotal(mergedItems));
+
+      activeOrder.visitId = visit;
+      activeOrder.sessionId = sessionId;
+      activeOrder.customerId = linkedCustomer?._id || activeOrder.customerId || null;
+      activeOrder.customerName = customerName;
+      activeOrder.phone = normalizedPhone;
+      activeOrder.notes = mergeOrderNotes(activeOrder.notes, notes);
+      activeOrder.items = mergedItems;
+      activeOrder.subtotalAmount = subtotalAmount;
+      activeOrder.discountAmount = discountAmount;
+      activeOrder.taxAmount = taxAmount;
+      activeOrder.totalAmount = totalAmount;
+      activeOrder.paymentMode = paymentValue;
+      activeOrder.source = "qr";
+      activeOrder.status = "pending";
+      activeOrder.paidAt = null;
+      order = await activeOrder.save();
+      responseStatus = 200;
+      emittedEvent = "ORDER_UPDATED";
+    } else {
+      const { subtotalAmount, discountAmount, taxAmount, totalAmount } = computeOrderTotals(cafe, lineSubtotal);
+      order = await Order.create({
+        cafeId,
+        tableNumber,
+        visitId: visit,
+        sessionId,
+        customerId: linkedCustomer?._id || null,
+        customerName,
+        phone: normalizedPhone,
+        notes: typeof notes === "string" ? notes.trim() : "",
+        items: resolvedItems,
+        subtotalAmount,
+        discountAmount,
+        taxAmount,
+        totalAmount,
+        paymentMode: paymentValue,
+        source: "qr",
+        status: "pending",
+      });
+    }
 
     await Table.findOneAndUpdate(
       { cafeId, tableNumber },
       { $set: { status: "reserved" } }
     );
 
-    emitCafeEvent(order.cafeId, "NEW_ORDER", order);
+    const responseOrder = typeof order?.toObject === "function" ? order.toObject() : order;
+    const responsePayload = {
+      ...responseOrder,
+      mergedIntoExisting: emittedEvent === "ORDER_UPDATED",
+      addedItemsCount: resolvedItems.reduce((sum, item) => sum + Number(item?.qty || 0), 0),
+    };
+
+    emitCafeEvent(order.cafeId, "NEW_ORDER", responsePayload);
+    if (emittedEvent === "ORDER_UPDATED") {
+      emitCafeEvent(order.cafeId, "ORDER_UPDATED", responsePayload);
+    }
 
     try {
       await attachOrderToSession({
@@ -237,7 +348,7 @@ exports.createOrder = async (req, res) => {
       // non-fatal
     }
 
-    return res.status(201).json(order);
+    return res.status(responseStatus).json(responsePayload);
   } catch (error) {
     return res.status(500).json({ message: "Server error", error });
   }

@@ -21,6 +21,11 @@ import { peekVisitId } from "../../../lib/visitSession";
 
 const statusSteps = ["pending", "accepted", "preparing", "ready", "served", "paid", "rejected"];
 
+function orderIncludesLaterItems(order) {
+  if (!order?.updatedAt || !order?.createdAt) return false;
+  return new Date(order.updatedAt).getTime() - new Date(order.createdAt).getTime() > 60 * 1000;
+}
+
 export default function OrdersPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -207,6 +212,9 @@ export default function OrdersPage() {
               <StaffAlertBanner message={statusToast} variant="success" />
             </div>
           )}
+          <div className="mt-3 rounded-3xl border border-sky-200 bg-sky-50/80 p-4 text-sm text-sky-950 shadow-sm">
+            Repeat orders from this table are added to your current open order, so your final bill stays combined.
+          </div>
           {error && <div className="mt-4 text-sm font-semibold text-red-700">{error}</div>}
 
           {loading ? (
@@ -249,6 +257,12 @@ export default function OrdersPage() {
                           </div>
                         ))}
                       </div>
+
+                      {orderIncludesLaterItems(order) && (
+                        <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+                          This order includes items you added later from the same table visit.
+                        </div>
+                      )}
 
                       {(() => {
                         const lineSum = order.items.reduce(

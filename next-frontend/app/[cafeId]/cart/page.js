@@ -55,6 +55,7 @@ export default function CartPage() {
   const [showDetails, setShowDetails] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [phoneError, setPhoneError] = useState("");
+  const [cartHintDismissed, setCartHintDismissed] = useState(false);
   const reducedMotion = useReducedMotion();
   const tableGuard = useTableGuard({
     cafeId,
@@ -230,7 +231,15 @@ export default function CartPage() {
       writeCart(cafeId, tableNumber, []);
       setCart([]);
       playSuccess();
-      router.replace(`/${cafeId}/order/${order._id}?table=${tableNumber}&t=${encodeURIComponent(tableToken)}`);
+      const nextParams = new URLSearchParams({
+        table: String(tableNumber),
+        t: tableToken,
+      });
+      if (order?.mergedIntoExisting) {
+        nextParams.set("merged", "1");
+        nextParams.set("added", String(order?.addedItemsCount || totalItems));
+      }
+      router.replace(`/${cafeId}/order/${order._id}?${nextParams.toString()}`);
     } catch (e) {
       playSoftError();
       setError(e.message || "Failed to place order");
@@ -299,6 +308,21 @@ export default function CartPage() {
         </div>
 
       <div className="mx-auto w-full max-w-md px-4 pt-3">
+        {!cartHintDismissed && (
+          <div className="rounded-3xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950 shadow-sm">
+            <div className="font-semibold">Ordering more later?</div>
+            <div className="mt-1">
+              New items from this same table visit will be added to your current open order and final bill.
+            </div>
+            <button
+              type="button"
+              className="mt-3 rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-900"
+              onClick={() => setCartHintDismissed(true)}
+            >
+              Got it
+            </button>
+          </div>
+        )}
         {cart.length === 0 ? (
           <div className="mt-8 rounded-3xl border border-white/70 bg-white/80 p-6 text-center text-sm text-slate-600 shadow-sm">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
