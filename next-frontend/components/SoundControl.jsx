@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Volume2, VolumeX, Smartphone, Bell } from "lucide-react";
-import { primeSoundSystem, testSoundAndVibration } from "../lib/sounds";
+import { playKitchenOrderAlertPreview, primeSoundSystem } from "../lib/sounds";
 import { getSoundPreferences, setSoundPreferences } from "../lib/soundPreferences";
 
 export default function SoundControl({ className = "" }) {
@@ -18,8 +18,13 @@ export default function SoundControl({ className = "" }) {
   }, []);
 
   const toggleMute = () => {
-    setSoundPreferences({ muted: !prefs.muted });
-    setPrefs(getSoundPreferences());
+    const nextMuted = !prefs.muted;
+    setSoundPreferences({ muted: nextMuted });
+    const nextPrefs = getSoundPreferences();
+    setPrefs(nextPrefs);
+    if (!nextMuted) {
+      playKitchenOrderAlertPreview();
+    }
   };
 
   const toggleVibrate = () => {
@@ -32,7 +37,7 @@ export default function SoundControl({ className = "" }) {
       setSoundPreferences({ muted: false });
       setPrefs(getSoundPreferences());
     }
-    testSoundAndVibration();
+    playKitchenOrderAlertPreview();
   };
 
   return (

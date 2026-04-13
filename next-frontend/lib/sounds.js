@@ -209,6 +209,20 @@ export function stopKitchenOrderAlertLoop() {
   }
 }
 
+export function playKitchenOrderAlertPreview() {
+  if (typeof window === "undefined") return Promise.resolve(false);
+  const hadLoopingAlert = Boolean(kitchenAlertAudio && !kitchenAlertAudio.paused);
+  return startKitchenOrderAlertLoop().then((started) => {
+    if (!started || hadLoopingAlert || !kitchenAlertAudio) return started;
+    window.setTimeout(() => {
+      if (!hadLoopingAlert) {
+        stopKitchenOrderAlertLoop();
+      }
+    }, 4000);
+    return started;
+  });
+}
+
 export function playWaiterReady() {
   playOscillator(880, 120, "sine", 0.13);
   setTimeout(() => playOscillator(1175, 200, "sine", 0.13), 90);
