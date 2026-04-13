@@ -3,7 +3,7 @@ const STORAGE_KEY = "qrdine:sound";
 /** @returns {{ muted: boolean, volume: number, vibrate: boolean }} */
 export function getSoundPreferences() {
   if (typeof window === "undefined") {
-    return { muted: false, volume: 0.7, vibrate: true };
+    return { muted: false, volume: 0.85, vibrate: true };
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -11,7 +11,7 @@ export function getSoundPreferences() {
     const parsed = JSON.parse(raw);
     return {
       muted: Boolean(parsed.muted),
-      volume: typeof parsed.volume === "number" ? Math.min(1, Math.max(0, parsed.volume)) : 0.7,
+      volume: typeof parsed.volume === "number" ? Math.min(1, Math.max(0, parsed.volume)) : 0.85,
       vibrate: parsed.vibrate !== false,
     };
   } catch {
@@ -21,7 +21,7 @@ export function getSoundPreferences() {
 
 function getDefaultPreferences() {
   if (typeof window === "undefined") {
-    return { muted: false, volume: 0.7, vibrate: true };
+    return { muted: false, volume: 0.85, vibrate: true };
   }
   const path = window.location.pathname || "";
   const staff =
@@ -32,7 +32,7 @@ function getDefaultPreferences() {
     path.includes("/super-admin");
   return {
     muted: staff ? false : true,
-    volume: 0.65,
+    volume: staff ? 0.85 : 0.65,
     vibrate: true,
   };
 }

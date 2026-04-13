@@ -6,6 +6,11 @@ let sharedAudioContext = null;
 let soundSystemPrimed = false;
 let unlockListenersAttached = false;
 let lastVibrationAt = 0;
+let kitchenAlertAudio = null;
+let kitchenAlertSourceNode = null;
+let kitchenAlertGainNode = null;
+let kitchenAlertCompressorNode = null;
+let kitchenAlertPrefsListenerAttached = false;
 
 function effectiveGain(baseGain) {
   const { muted, volume } = getSoundPreferences();
@@ -25,6 +30,51 @@ function getAudioContext() {
     }
   }
   return sharedAudioContext;
+}
+
+function isDesktopClassDevice() {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  try {
+    return window.matchMedia("(pointer: fine)").matches;
+  } catch {
+    return false;
+  }
+}
+
+function ensureKitchenAlertNodes(audio) {
+  const ctx = getAudioContext();
+  if (!ctx || !audio) return null;
+  if (!kitchenAlertSourceNode) {
+    try {
+      kitchenAlertSourceNode = ctx.createMediaElementSource(audio);
+      kitchenAlertGainNode = ctx.createGain();
+      kitchenAlertCompressorNode = ctx.createDynamicsCompressor();
+      kitchenAlertCompressorNode.threshold.value = -24;
+      kitchenAlertCompressorNode.knee.value = 18;
+      kitchenAlertCompressorNode.ratio.value = 10;
+      kitchenAlertCompressorNode.attack.value = 0.003;
+      kitchenAlertCompressorNode.release.value = 0.2;
+      kitchenAlertSourceNode.connect(kitchenAlertGainNode);
+      kitchenAlertGainNode.connect(kitchenAlertCompressorNode);
+      kitchenAlertCompressorNode.connect(ctx.destination);
+    } catch {
+      kitchenAlertSourceNode = null;
+      kitchenAlertGainNode = null;
+      kitchenAlertCompressorNode = null;
+    }
+  }
+  return { ctx, gainNode: kitchenAlertGainNode };
+}
+
+function syncKitchenAlertVolume() {
+  const { muted, volume } = getSoundPreferences();
+  if (kitchenAlertAudio) {
+    kitchenAlertAudio.volume = muted ? 0 : Math.min(1, Math.max(0.85, volume));
+  }
+  if (kitchenAlertGainNode) {
+    const boost = isDesktopClassDevice() ? 2.35 : 1.2;
+    kitchenAlertGainNode.gain.value = muted ? 0 : Math.max(0.0001, volume * boost);
+  }
 }
 
 function resumeAudioContext() {
@@ -120,6 +170,45 @@ export function playKitchenNewOrder() {
   vibrate([90, 50, 90]);
 }
 
+export function startKitchenOrderAlertLoop() {
+  if (typeof window === "undefined") return Promise.resolve(false);
+  primeSoundSystem();
+  const { muted } = getSoundPreferences();
+  if (muted) return Promise.resolve(false);
+  if (!kitchenAlertAudio) {
+    try {
+      kitchenAlertAudio = new Audio("/preview.mp3");
+      kitchenAlertAudio.loop = true;
+      kitchenAlertAudio.preload = "auto";
+      kitchenAlertAudio.playsInline = true;
+    } catch {
+      kitchenAlertAudio = null;
+    }
+  }
+  if (!kitchenAlertAudio) return Promise.resolve(false);
+  syncKitchenAlertVolume();
+  const nodeBundle = ensureKitchenAlertNodes(kitchenAlertAudio);
+  if (!nodeBundle?.ctx || nodeBundle.ctx.state === "running") {
+    return kitchenAlertAudio.play().then(() => true).catch(() => false);
+  }
+  return resumeAudioContext()
+    .then(() => {
+      syncKitchenAlertVolume();
+      return kitchenAlertAudio.play().then(() => true).catch(() => false);
+    })
+    .catch(() => false);
+}
+
+export function stopKitchenOrderAlertLoop() {
+  if (!kitchenAlertAudio) return;
+  try {
+    kitchenAlertAudio.pause();
+    kitchenAlertAudio.currentTime = 0;
+  } catch {
+    // ignore
+  }
+}
+
 export function playWaiterReady() {
   playOscillator(880, 120, "sine", 0.13);
   setTimeout(() => playOscillator(1175, 200, "sine", 0.13), 90);
@@ -202,4 +291,9 @@ export function requestNotificationPermission() {
   if (typeof window === "undefined" || typeof Notification === "undefined") return Promise.resolve("unsupported");
   if (Notification.permission !== "default") return Promise.resolve(Notification.permission);
   return Notification.requestPermission();
+}
+
+if (typeof window !== "undefined" && !kitchenAlertPrefsListenerAttached) {
+  kitchenAlertPrefsListenerAttached = true;
+  window.addEventListener("qrdine-sound-prefs", syncKitchenAlertVolume);
 }

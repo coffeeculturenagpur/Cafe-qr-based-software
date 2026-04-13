@@ -7,7 +7,7 @@ import { getSoundPreferences, setSoundPreferences } from "../lib/soundPreference
 
 export default function SoundControl({ className = "" }) {
   // Use a deterministic default for the first render to prevent hydration mismatches.
-  const [prefs, setPrefs] = useState({ muted: true, volume: 0.65, vibrate: true });
+  const [prefs, setPrefs] = useState({ muted: true, volume: 0.85, vibrate: true });
 
   useEffect(() => {
     primeSoundSystem();

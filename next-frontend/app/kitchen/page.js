@@ -5,7 +5,13 @@ import Link from "next/link";
 import { apiFetch } from "../../lib/api";
 import { isOrderInLocalToday, ordersTodayQueryString } from "../../lib/staffOrderRange";
 import { filterKitchenLiveOrders, isKitchenLiveOrder } from "../../lib/staffOrderFilters";
-import { maybeNotifyBrowser, playKitchenNewOrder, playSuccess, requestNotificationPermission } from "../../lib/sounds";
+import {
+  maybeNotifyBrowser,
+  playSuccess,
+  requestNotificationPermission,
+  startKitchenOrderAlertLoop,
+  stopKitchenOrderAlertLoop,
+} from "../../lib/sounds";
 import { motion, useReducedMotion } from "framer-motion";
 import StaffAlertBanner from "../../components/StaffAlertBanner";
 import { StaffShell } from "../../components/StaffShell";
@@ -143,6 +149,7 @@ export default function KitchenPage() {
   const [selectedTableKey, setSelectedTableKey] = useState("");
   const [blinkingTables, setBlinkingTables] = useState({});
   const tableCardRefs = useRef({});
+  const pendingAlertOrderIdsRef = useRef(new Set());
 
   const stats = useMemo(() => {
     const total = orders.length;
@@ -275,6 +282,14 @@ export default function KitchenPage() {
   useEffect(() => {
     if (!cafeId) return;
 
+    const syncPendingAlertLoop = () => {
+      if (pendingAlertOrderIdsRef.current.size > 0) {
+        startKitchenOrderAlertLoop();
+      } else {
+        stopKitchenOrderAlertLoop();
+      }
+    };
+
     const socket = connectCafeSocket(cafeId);
     setSocketState("connecting");
 
@@ -283,8 +298,15 @@ export default function KitchenPage() {
 
     const merge = (order) => {
       if (!isOrderInLocalToday(order)) return;
+      const orderId = String(order?._id || "");
+      const normalizedStatus = String(order?.status || "").toLowerCase();
+      if (normalizedStatus !== "pending") {
+        pendingAlertOrderIdsRef.current.delete(orderId);
+      }
       setTodayOrders((prev) => upsertOrder(prev, order));
       if (!isKitchenLiveOrder(order)) {
+        pendingAlertOrderIdsRef.current.delete(orderId);
+        syncPendingAlertLoop();
         setOrders((prev) => prev.filter((o) => o._id !== order._id));
         return;
       }
@@ -292,12 +314,16 @@ export default function KitchenPage() {
       if (tableNumber > 0) {
         setBlinkingTables((prev) => ({ ...prev, [tableNumber]: true }));
       }
+      syncPendingAlertLoop();
       setOrders((prev) => upsertOrder(prev, order));
     };
     const onNewOrder = (order) => {
       if (!isOrderInLocalToday(order)) return;
-      if (!isKitchenLiveOrder(order)) return;
-      playKitchenNewOrder();
+        if (!isKitchenLiveOrder(order)) return;
+        if (String(order?.status || "").toLowerCase() === "pending" && order?._id) {
+          pendingAlertOrderIdsRef.current.add(String(order._id));
+        }
+        syncPendingAlertLoop();
       const line = order?.items?.map((i) => `${i.name}×${i.qty}`).join(", ") || "";
       setAlertMsg(`New order · Table ${order.tableNumber}${line ? ` · ${line.slice(0, 80)}` : ""}`);
       setTimeout(() => setAlertMsg(""), 8000);
@@ -308,6 +334,8 @@ export default function KitchenPage() {
     socket.on("ORDER_UPDATED", merge);
 
     return () => {
+      pendingAlertOrderIdsRef.current.clear();
+      stopKitchenOrderAlertLoop();
       socket.off("NEW_ORDER", onNewOrder);
       socket.off("ORDER_UPDATED", merge);
       socket.disconnect();
@@ -334,6 +362,14 @@ export default function KitchenPage() {
         return filterKitchenLiveOrders(next);
       });
       setTodayOrders((prev) => upsertOrder(prev, updated));
+      if (String(updated?.status || status).toLowerCase() !== "pending") {
+        pendingAlertOrderIdsRef.current.delete(String(orderId));
+        if (pendingAlertOrderIdsRef.current.size > 0) {
+          startKitchenOrderAlertLoop();
+        } else {
+          stopKitchenOrderAlertLoop();
+        }
+      }
       playSuccess();
     } catch (e) {
       setError(e.message || "Failed to update order");
