@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "../../lib/api";
-import { isOrderInLocalToday, ordersTodayQueryString } from "../../lib/staffOrderRange";
+import { ordersTodayQueryString } from "../../lib/staffOrderRange";
 import { filterKitchenLiveOrders, isKitchenLiveOrder } from "../../lib/staffOrderFilters";
 import {
   maybeNotifyBrowser,
@@ -243,14 +243,16 @@ export default function KitchenPage() {
       setMenuError("");
       try {
         const qs = ordersTodayQueryString();
-        const [list, cafeData, menuData] = await Promise.all([
+        const [liveList, todayList, cafeData, menuData] = await Promise.all([
+          apiFetch(`/api/orders/${cafeId}`, { headers: { ...(token ? authHeaders() : {}) } }),
           apiFetch(`/api/orders/${cafeId}?${qs}`, { headers: { ...(token ? authHeaders() : {}) } }),
           getCafeWithCache(cafeId, { force: forceStatic }),
           getMenuWithCache(cafeId, { force: forceStatic }),
         ]);
-        const normalizedList = Array.isArray(list) ? list : [];
-        setTodayOrders(normalizedList);
-        setOrders(filterKitchenLiveOrders(normalizedList));
+        const normalizedLiveList = Array.isArray(liveList) ? liveList : [];
+        const normalizedTodayList = Array.isArray(todayList) ? todayList : [];
+        setTodayOrders(normalizedTodayList);
+        setOrders(filterKitchenLiveOrders(normalizedLiveList));
         setCafeInfo(cafeData || null);
         setMenuItems(Array.isArray(menuData) ? menuData : []);
       } catch (e) {
@@ -297,7 +299,6 @@ export default function KitchenPage() {
     socket.on("disconnect", () => setSocketState("disconnected"));
 
     const merge = (order) => {
-      if (!isOrderInLocalToday(order)) return;
       const orderId = String(order?._id || "");
       const normalizedStatus = String(order?.status || "").toLowerCase();
       if (normalizedStatus !== "pending") {
@@ -318,12 +319,11 @@ export default function KitchenPage() {
       setOrders((prev) => upsertOrder(prev, order));
     };
     const onNewOrder = (order) => {
-      if (!isOrderInLocalToday(order)) return;
-        if (!isKitchenLiveOrder(order)) return;
-        if (String(order?.status || "").toLowerCase() === "pending" && order?._id) {
-          pendingAlertOrderIdsRef.current.add(String(order._id));
-        }
-        syncPendingAlertLoop();
+      if (!isKitchenLiveOrder(order)) return;
+      if (String(order?.status || "").toLowerCase() === "pending" && order?._id) {
+        pendingAlertOrderIdsRef.current.add(String(order._id));
+      }
+      syncPendingAlertLoop();
       const line = order?.items?.map((i) => `${i.name}×${i.qty}`).join(", ") || "";
       setAlertMsg(`New order · Table ${order.tableNumber}${line ? ` · ${line.slice(0, 80)}` : ""}`);
       setTimeout(() => setAlertMsg(""), 8000);
