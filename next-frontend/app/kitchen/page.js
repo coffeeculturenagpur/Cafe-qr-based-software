@@ -28,7 +28,7 @@ import { getCafeWithCache } from "../../lib/cafeClient";
 import { getMenuWithCache } from "../../lib/menuClient";
 import { getOrderStatusPalette } from "../../lib/orderStatusPalette";
 import { groupOrdersByTable } from "../../lib/orderGrouping";
-import { formatOrderAcceptToServe } from "../../lib/orderTiming";
+import { formatOrderAcceptedAt, formatOrderAcceptToServe, formatOrderServedAt } from "../../lib/orderTiming";
 import { TableStatusPad } from "../../components/staff/TableStatusPad";
 import { ChevronDown, ClipboardList, QrCode, X } from "lucide-react";
 
@@ -790,6 +790,12 @@ export default function KitchenPage() {
                                 </div>
                               )}
                               <div className={`mt-1 text-[11px] font-semibold ${orderPalette.mutedTextClassName || "text-slate-600"}`}>
+                                Accepted at: {formatOrderAcceptedAt(o)}
+                              </div>
+                              <div className={`mt-1 text-[11px] font-semibold ${orderPalette.mutedTextClassName || "text-slate-600"}`}>
+                                Served at: {formatOrderServedAt(o)}
+                              </div>
+                              <div className={`mt-1 text-[11px] font-semibold ${orderPalette.mutedTextClassName || "text-slate-600"}`}>
                                 Accepted to served: {formatOrderAcceptToServe(o)}
                               </div>
 
@@ -1123,6 +1129,14 @@ export default function KitchenPage() {
                                 <div className="mt-1 font-bold">{String(o.paymentMode).toUpperCase()}</div>
                               </div>
                             ) : null}
+                            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-3 py-2 text-[13px] text-slate-800">
+                              <div className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-600">Accepted At</div>
+                              <div className="mt-1 font-bold">{formatOrderAcceptedAt(o)}</div>
+                            </div>
+                            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-3 py-2 text-[13px] text-slate-800">
+                              <div className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-600">Served At</div>
+                              <div className="mt-1 font-bold">{formatOrderServedAt(o)}</div>
+                            </div>
                             <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-3 py-2 text-[13px] text-slate-800">
                               <div className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-600">Accepted to Served</div>
                               <div className="mt-1 font-bold">{formatOrderAcceptToServe(o)}</div>

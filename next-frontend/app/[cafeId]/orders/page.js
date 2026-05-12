@@ -18,7 +18,7 @@ import { AppLoading } from "../../../components/AppLoading";
 import { useTableGuard } from "../../../lib/useTableGuard";
 import { getCafeWithCache } from "../../../lib/cafeClient";
 import { peekVisitId } from "../../../lib/visitSession";
-import { formatOrderAcceptToServe } from "../../../lib/orderTiming";
+import { formatOrderAcceptedAt, formatOrderAcceptToServe, formatOrderServedAt } from "../../../lib/orderTiming";
 
 const statusSteps = ["pending", "accepted", "preparing", "ready", "served", "paid", "rejected"];
 
@@ -321,6 +321,12 @@ export default function OrdersPage() {
                       <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
                         <Clock size={12} />
                         <span>Status refreshes live. No need to reload.</span>
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-slate-600">
+                        Accepted at: {formatOrderAcceptedAt(order)}
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-slate-600">
+                        Served at: {formatOrderServedAt(order)}
                       </div>
                       <div className="mt-1 text-xs font-semibold text-slate-600">
                         Accepted to served: {formatOrderAcceptToServe(order)}

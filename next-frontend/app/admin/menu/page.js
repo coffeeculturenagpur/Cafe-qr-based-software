@@ -18,7 +18,7 @@ import { apiFetch, getApiBaseUrl } from "../../../lib/api";
 import { getEnvCustomerAppUrl } from "../../../lib/customerAppUrl";
 import { TableQrCode } from "../../../components/admin/TableQrCode";
 import { isOrderInLocalToday, ordersTodayQueryString } from "../../../lib/staffOrderRange";
-import { formatOrderAcceptToServe } from "../../../lib/orderTiming";
+import { formatOrderAcceptedAt, formatOrderAcceptToServe, formatOrderServedAt } from "../../../lib/orderTiming";
 import Link from "next/link";
 import { authHeaders, getToken } from "../../../lib/auth";
 import { useClientAuth } from "../../../lib/useClientAuth";
@@ -2364,6 +2364,12 @@ export default function AdminMenuPage() {
                         {order.items?.length > 2 && (
                           <div className="text-xs text-gray-500 mt-1">+{order.items.length - 2} more items</div>
                         )}
+                      </div>
+                      <div className="mt-2 text-xs font-semibold text-slate-600">
+                        Accepted at: {formatOrderAcceptedAt(order)}
+                      </div>
+                      <div className="mt-2 text-xs font-semibold text-slate-600">
+                        Served at: {formatOrderServedAt(order)}
                       </div>
                       <div className="mt-2 text-xs font-semibold text-slate-600">
                         Accepted to served: {formatOrderAcceptToServe(order)}
