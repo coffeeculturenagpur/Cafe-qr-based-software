@@ -18,6 +18,7 @@ import { apiFetch, getApiBaseUrl } from "../../../lib/api";
 import { getEnvCustomerAppUrl } from "../../../lib/customerAppUrl";
 import { TableQrCode } from "../../../components/admin/TableQrCode";
 import { isOrderInLocalToday, ordersTodayQueryString } from "../../../lib/staffOrderRange";
+import { filterAdminLiveOrders, isAdminLiveOrder } from "../../../lib/staffOrderFilters";
 import { formatOrderAcceptedAt, formatOrderAcceptToServe, formatOrderServedAt } from "../../../lib/orderTiming";
 import Link from "next/link";
 import { authHeaders, getToken } from "../../../lib/auth";
@@ -795,7 +796,8 @@ export default function AdminMenuPage() {
       const data = await apiFetch(`/api/orders/${tablesCafeId}?${qs}`, {
         headers: { ...authHeaders() },
       });
-      setOrders(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setOrders(filterAdminLiveOrders(list));
     } catch (e) {
       setOrdersError(e.message || "Failed to load orders");
     } finally {
@@ -1558,6 +1560,9 @@ export default function AdminMenuPage() {
       if (!payload?._id) return;
       if (!isOrderInLocalToday(payload)) return;
       setOrders((prev) => {
+        if (!isAdminLiveOrder(payload)) {
+          return prev.filter((o) => o._id !== payload._id);
+        }
         const idx = prev.findIndex((o) => o._id === payload._id);
         if (idx === -1) return [payload, ...prev];
         const copy = prev.slice();

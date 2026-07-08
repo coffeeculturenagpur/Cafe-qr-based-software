@@ -1,3 +1,4 @@
+const path = require('path');
 const express = require('express');
 const http = require('http');
 const dotenv = require('dotenv');
@@ -21,17 +22,7 @@ const { initSocket } = require('./realtime/socket');
 const { ensureSessionId } = require('./utils/sessionIdentity');
 const { initSessionStore, getSessionStoreMode } = require('./services/sessionStore');
 
-dotenv.config();
-connectDB();
-initSessionStore()
-  .then(({ mode }) => {
-    // eslint-disable-next-line no-console
-    console.log(`Session store initialized in ${mode} mode`);
-  })
-  .catch((error) => {
-    // eslint-disable-next-line no-console
-    console.warn(`Session store initialization failed, using ${getSessionStoreMode()} mode:`, error.message);
-  });
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 app.set("trust proxy", 1);
@@ -105,4 +96,27 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+
+async function bootstrap() {
+  try {
+    await connectDB();
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('MongoDB connection failed:', error.message);
+    process.exit(1);
+  }
+
+  initSessionStore()
+    .then(({ mode }) => {
+      // eslint-disable-next-line no-console
+      console.log(`Session store initialized in ${mode} mode`);
+    })
+    .catch((error) => {
+      // eslint-disable-next-line no-console
+      console.warn(`Session store initialization failed, using ${getSessionStoreMode()} mode:`, error.message);
+    });
+
+  server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+}
+
+bootstrap();

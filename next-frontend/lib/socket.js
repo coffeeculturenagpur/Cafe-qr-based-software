@@ -3,10 +3,13 @@ import { getApiBaseUrl } from "./api";
 import { getToken } from "./auth";
 
 export function connectCafeSocket(cafeId) {
-  const baseUrl = getApiBaseUrl();
+  // Prefer explicit API base; otherwise same origin (Next rewrite / same host deploy).
+  const baseUrl =
+    getApiBaseUrl() ||
+    (typeof window !== "undefined" ? window.location.origin : undefined);
   const token = typeof window !== "undefined" ? getToken() : null;
   const socket = io(baseUrl, {
-    transports: ["websocket"],
+    transports: ["websocket", "polling"],
     auth: token ? { token } : {},
   });
 

@@ -20,6 +20,14 @@ const {
   upsertSessionState,
 } = require("../services/sessionStore");
 
+function businessDayStartLocal({ startHour = 1 } = {}) {
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(Number(startHour) || 0, 0, 0, 0);
+  if (now.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
+  return start;
+}
+
 function normalizePaymentMode(value, fallback = "cash") {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
   const paymentValue = normalized || fallback;
@@ -410,11 +418,16 @@ exports.listOrdersByCafe = async (req, res) => {
     }
     const q = { cafeId };
     const { from, to, minTotal, maxTotal, status } = req.query;
+    const scope = String(req.query.scope || "").trim().toLowerCase();
 
     if (from || to) {
       q.createdAt = {};
       if (from) q.createdAt.$gte = new Date(String(from));
       if (to) q.createdAt.$lte = new Date(String(to));
+    } else if (scope === "kitchen_live") {
+      // Server-time based "business day" filter for the kitchen dashboard.
+      // Keeps the UI independent of device/system time.
+      q.createdAt = { $gte: businessDayStartLocal({ startHour: 1 }) };
     }
 
     if (minTotal !== undefined && minTotal !== "" && !Number.isNaN(Number(minTotal))) {
