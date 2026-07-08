@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "../../lib/api";
-import { ordersTodayQueryString } from "../../lib/staffOrderRange";
+import { ordersBusinessDayQueryString } from "../../lib/staffOrderRange";
 import {
   filterKitchenLiveOrders,
   isKitchenLiveOrder,
@@ -94,7 +94,8 @@ function kitchenActionButtonClass(kind) {
 }
 
 function upsertOrder(list, order) {
-  const idx = list.findIndex((x) => x._id === order._id);
+  const orderId = String(order?._id || "");
+  const idx = list.findIndex((x) => String(x?._id || "") === orderId);
   if (idx === -1) return [order, ...list];
   const copy = list.slice();
   copy[idx] = order;
@@ -165,7 +166,11 @@ export default function KitchenPage() {
 
   const [cafeIdOverride, setCafeIdOverride] = useState("");
   const cafeId = useMemo(
-    () => cafeIdOverride || user?.cafeId || "",
+    () => {
+      const raw = cafeIdOverride || user?.cafeId || "";
+      const normalized = typeof raw === "string" ? raw : String(raw);
+      return normalized.trim();
+    },
     [cafeIdOverride, user?.cafeId],
   );
 
@@ -536,10 +541,11 @@ export default function KitchenPage() {
       setError("");
       setMenuError("");
       try {
-        const qs = ordersTodayQueryString();
+        const qs = ordersBusinessDayQueryString({ startHour: 1 });
         const [liveList, todayList, cafeData, menuData, popularItemsData] =
           await Promise.all([
-            apiFetch(`/api/orders/${cafeId}`, {
+            // Use server-time scoped query so the reset is independent of device clock.
+            apiFetch(`/api/orders/${cafeId}?scope=kitchen_live`, {
               headers: { ...(token ? authHeaders() : {}) },
             }),
             apiFetch(`/api/orders/${cafeId}?${qs}`, {
@@ -603,7 +609,10 @@ export default function KitchenPage() {
   }, [cafeId, loadKitchenData]);
 
   useEffect(() => {
-    if (!cafeId) return;
+    // IMPORTANT: kitchen sockets must join the role room, which requires an auth token.
+    // If we connect before the token is available, the server will treat this socket as a guest
+    // and it won't receive kitchen-only events like NEW_ORDER.
+    if (!cafeId || !token) return;
 
     const syncPendingAlertLoop = () => {
       if (pendingAlertOrderIdsRef.current.size > 0) {
@@ -618,6 +627,14 @@ export default function KitchenPage() {
 
     socket.on("connect", () => setSocketState("connected"));
     socket.on("disconnect", () => setSocketState("disconnected"));
+    socket.on("connect_error", (err) => {
+      const message = err?.message ? String(err.message) : "Socket connect failed";
+      setSocketState(`connect_error: ${message}`);
+    });
+    socket.on("JOIN_ERROR", (payload) => {
+      const message = payload?.message ? String(payload.message) : "Join failed";
+      setSocketState(`join_error: ${message}`);
+    });
 
     const merge = (order) => {
       const orderId = String(order?._id || "");
@@ -629,7 +646,7 @@ export default function KitchenPage() {
       if (!isKitchenLiveOrder(order)) {
         pendingAlertOrderIdsRef.current.delete(orderId);
         syncPendingAlertLoop();
-        setOrders((prev) => prev.filter((o) => o._id !== order._id));
+        setOrders((prev) => prev.filter((o) => String(o?._id || "") !== orderId));
         return;
       }
       const tableNumber = Number(order?.tableNumber || 0);
@@ -665,9 +682,10 @@ export default function KitchenPage() {
       stopKitchenOrderAlertLoop();
       socket.off("NEW_ORDER", onNewOrder);
       socket.off("ORDER_UPDATED", merge);
+      socket.off("JOIN_ERROR");
       socket.disconnect();
     };
-  }, [cafeId]);
+  }, [cafeId, token]);
 
   useEffect(() => {
     if (selectedTableKey && !selectedGroup) {
@@ -685,7 +703,10 @@ export default function KitchenPage() {
         body: JSON.stringify({ status }),
       });
       setOrders((prev) => {
-        const next = prev.map((o) => (o._id === updated._id ? updated : o));
+        const updatedId = String(updated?._id || "");
+        const next = prev.map((o) =>
+          String(o?._id || "") === updatedId ? updated : o,
+        );
         return filterKitchenLiveOrders(next);
       });
       setTodayOrders((prev) => upsertOrder(prev, updated));
@@ -1243,7 +1264,10 @@ export default function KitchenPage() {
       if (isKitchenLiveOrder(updated)) {
         setOrders((prev) => upsertOrder(prev, updated));
       } else {
-        setOrders((prev) => prev.filter((order) => order._id !== updated._id));
+        const updatedId = String(updated?._id || "");
+        setOrders((prev) =>
+          prev.filter((order) => String(order?._id || "") !== updatedId),
+        );
       }
       closeOrderEditor();
     } catch (e) {
@@ -1273,7 +1297,10 @@ export default function KitchenPage() {
       if (isKitchenLiveOrder(updated)) {
         setOrders((prev) => upsertOrder(prev, updated));
       } else {
-        setOrders((prev) => prev.filter((order) => order._id !== updated._id));
+        const updatedId = String(updated?._id || "");
+        setOrders((prev) =>
+          prev.filter((order) => String(order?._id || "") !== updatedId),
+        );
       }
       // Store the completed order so chef can print the bill
       setLastCreatedOrder(updated);

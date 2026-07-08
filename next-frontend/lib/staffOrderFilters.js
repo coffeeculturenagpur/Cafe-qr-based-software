@@ -1,3 +1,7 @@
+function normalizeStatus(order) {
+  return typeof order?.status === "string" ? order.status.trim().toLowerCase() : "";
+}
+
 /** Statuses hidden from kitchen live board (handed off or completed). */
 const KITCHEN_LIVE_EXCLUDED = new Set(["ready", "served", "paid", "rejected"]);
 
@@ -8,15 +12,18 @@ const WAITER_LIVE_VISIBLE = new Set(["ready", "served"]);
 const ADMIN_LIVE_EXCLUDED = new Set(["paid", "rejected"]);
 
 export function isKitchenLiveOrder(order) {
-  return order?.status && !KITCHEN_LIVE_EXCLUDED.has(order.status);
+  const status = normalizeStatus(order);
+  return status && !KITCHEN_LIVE_EXCLUDED.has(status);
 }
 
 export function isWaiterLiveOrder(order) {
-  return order?.status && WAITER_LIVE_VISIBLE.has(order.status);
+  const status = normalizeStatus(order);
+  return status && WAITER_LIVE_VISIBLE.has(status);
 }
 
 export function isAdminLiveOrder(order) {
-  return order?.status && !ADMIN_LIVE_EXCLUDED.has(order.status);
+  const status = normalizeStatus(order);
+  return status && !ADMIN_LIVE_EXCLUDED.has(status);
 }
 
 export function filterKitchenLiveOrders(orders) {
