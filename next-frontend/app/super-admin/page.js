@@ -147,7 +147,6 @@ export default function SuperAdminPage() {
     setError("");
     try {
       const baseUrl = getApiBaseUrl();
-      if (!baseUrl) throw new Error("Missing NEXT_PUBLIC_API_BASE_URL");
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch(`${baseUrl}/api/admin/media/image`, {
@@ -173,7 +172,6 @@ export default function SuperAdminPage() {
     setEditError("");
     try {
       const baseUrl = getApiBaseUrl();
-      if (!baseUrl) throw new Error("Missing NEXT_PUBLIC_API_BASE_URL");
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch(`${baseUrl}/api/admin/media/image`, {

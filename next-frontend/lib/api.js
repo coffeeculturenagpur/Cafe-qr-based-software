@@ -7,10 +7,8 @@ export function getApiBaseUrl() {
 
 export async function apiFetch(path, options = {}) {
   const baseUrl = getApiBaseUrl();
-  if (!baseUrl) {
-    throw new Error("Missing NEXT_PUBLIC_API_BASE_URL");
-  }
-
+  // If NEXT_PUBLIC_API_BASE_URL isn't provided, fall back to relative URLs.
+  // In local dev this pairs with Next rewrites to proxy /api/* to the backend.
   const url = path.startsWith("http") ? path : `${baseUrl}${path}`;
 
   const method = String(options.method || "GET").toUpperCase();

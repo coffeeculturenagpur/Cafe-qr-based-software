@@ -666,7 +666,6 @@ export default function AdminMenuPage() {
     setCafeError("");
     try {
       const baseUrl = getApiBaseUrl();
-      if (!baseUrl) throw new Error("Missing NEXT_PUBLIC_API_BASE_URL");
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch(`${baseUrl}/api/admin/media/image`, {
@@ -952,7 +951,6 @@ export default function AdminMenuPage() {
     setError("");
     try {
       const baseUrl = getApiBaseUrl();
-      if (!baseUrl) throw new Error("Missing NEXT_PUBLIC_API_BASE_URL");
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch(`${baseUrl}/api/admin/media/image`, {
@@ -1281,7 +1279,6 @@ export default function AdminMenuPage() {
     setCsvErrors([]);
     try {
       const baseUrl = getApiBaseUrl();
-      if (!baseUrl) throw new Error("Missing NEXT_PUBLIC_API_BASE_URL");
       const formData = new FormData();
       formData.append("file", csvFile);
       if (role === "super_admin") formData.append("cafeId", adminCafeId);
@@ -1346,7 +1343,6 @@ export default function AdminMenuPage() {
     setCsvPreviewLoading(true);
     try {
       const baseUrl = getApiBaseUrl();
-      if (!baseUrl) throw new Error("Missing NEXT_PUBLIC_API_BASE_URL");
       const formData = new FormData();
       formData.append("file", file);
       if (role === "super_admin") formData.append("cafeId", adminCafeId);
