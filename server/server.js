@@ -82,6 +82,17 @@ app.use('/api/admin/media', adminMediaRoutes);
 app.use('/api/admin/cafe', adminCafeRoutes);
 app.use('/api/qr', qrRoutes);
 
+// Global error handling middleware
+app.use((err, req, res, next) => {
+  console.error("Unhandled server error:", err);
+  if (res.headersSent) return next(err);
+  const status = err.status || err.statusCode || 500;
+  return res.status(status).json({
+    message: err.message || "Internal Server Error",
+    error: err.message || "Internal Server Error",
+  });
+});
+
 // Health check
 app.get('/healthz', (req, res) => {
   res.status(200).json({

@@ -1281,19 +1281,21 @@ export default function AdminMenuPage() {
     setCsvErrors([]);
     try {
       const baseUrl = getApiBaseUrl();
+      if (!baseUrl) throw new Error("Missing NEXT_PUBLIC_API_BASE_URL");
       const formData = new FormData();
       formData.append("file", csvFile);
-      if (role === "super_admin") formData.append("cafeId", adminCafeId);
-      const res = await fetch(`${baseUrl}/api/admin/menu/bulk-upload`, {
+      if (role === "super_admin" && adminCafeId) formData.append("cafeId", adminCafeId);
+      const qs = role === "super_admin" && adminCafeId ? `?cafeId=${encodeURIComponent(adminCafeId)}` : "";
+      const res = await fetch(`${baseUrl}/api/admin/menu/bulk-upload${qs}`, {
         method: "POST",
         headers: {
           ...(authHeaders() || {}),
         },
         body: formData,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "CSV upload failed");
-      setCsvSuccess(`Uploaded ${data.created} created, ${data.updated} updated (of ${data.total})`);
+      const data = await res.json().catch(() => ({ message: `HTTP ${res.status} error` }));
+      if (!res.ok) throw new Error(data?.message || data?.error || "CSV upload failed");
+      setCsvSuccess(`Uploaded ${data.created || 0} created, ${data.updated || 0} updated (of ${data.total || 0})`);
       if (Array.isArray(data.errors) && data.errors.length > 0) {
         setCsvErrors(data.errors);
       }
@@ -1345,18 +1347,20 @@ export default function AdminMenuPage() {
     setCsvPreviewLoading(true);
     try {
       const baseUrl = getApiBaseUrl();
+      if (!baseUrl) throw new Error("Missing NEXT_PUBLIC_API_BASE_URL");
       const formData = new FormData();
       formData.append("file", file);
-      if (role === "super_admin") formData.append("cafeId", adminCafeId);
-      const res = await fetch(`${baseUrl}/api/admin/menu/bulk-preview`, {
+      if (role === "super_admin" && adminCafeId) formData.append("cafeId", adminCafeId);
+      const qs = role === "super_admin" && adminCafeId ? `?cafeId=${encodeURIComponent(adminCafeId)}` : "";
+      const res = await fetch(`${baseUrl}/api/admin/menu/bulk-preview${qs}`, {
         method: "POST",
         headers: {
           ...(authHeaders() || {}),
         },
         body: formData,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Preview failed");
+      const data = await res.json().catch(() => ({ message: `HTTP ${res.status} error` }));
+      if (!res.ok) throw new Error(data?.message || data?.error || "Preview failed");
       setCsvPreview(Array.isArray(data.preview) ? data.preview : []);
       setCsvPreviewErrors(Array.isArray(data.errors) ? data.errors : []);
     } catch (e) {

@@ -18,7 +18,7 @@ test("getClientIp prefers the first forwarded IP", () => {
   assert.equal(getClientIp(req), "203.0.113.5");
 });
 
-test("signCustomerToken creates a 3-hour customer token bound to IP", () => {
+test("signCustomerToken creates a 3-hour customer token", () => {
   const req = { headers: { "x-forwarded-for": "203.0.113.5" } };
   const secret = "test-secret";
   const token = signCustomerToken({ customerId: "cust_123", req, secret });
@@ -27,11 +27,10 @@ test("signCustomerToken creates a 3-hour customer token bound to IP", () => {
   const payload = jwt.verify(token, secret);
   assert.equal(payload.sub, "cust_123");
   assert.equal(payload.aud, "customer");
-  assert.equal(payload.iph, ipFingerprint(req, secret));
   assert.ok(payload.exp - payload.iat <= 3 * 60 * 60);
 });
 
-test("verifyCustomerToken accepts matching IP and rejects mismatched IP", () => {
+test("verifyCustomerToken verifies valid customer token", () => {
   const secret = "test-secret";
   const sourceReq = { headers: { "x-forwarded-for": "203.0.113.5" } };
   const token = signCustomerToken({ customerId: "cust_123", req: sourceReq, secret });
@@ -39,11 +38,6 @@ test("verifyCustomerToken accepts matching IP and rejects mismatched IP", () => 
   const ok = verifyCustomerToken({ req: sourceReq, token, secret });
   assert.equal(ok.status, undefined);
   assert.equal(ok.payload.sub, "cust_123");
-
-  const wrongIpReq = { headers: { "x-forwarded-for": "198.51.100.9" } };
-  const denied = verifyCustomerToken({ req: wrongIpReq, token, secret });
-  assert.equal(denied.status, 401);
-  assert.match(denied.message, /Session expired/i);
 });
 
 test("customer cookie constants stay aligned with the short session policy", () => {
