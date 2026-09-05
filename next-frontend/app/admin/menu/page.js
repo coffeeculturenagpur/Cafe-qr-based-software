@@ -3066,14 +3066,14 @@ export default function AdminMenuPage() {
               {!collapsedSections.menuCreate && (
                 <>
               <div className="mb-6 rounded-2xl border border-orange-100 bg-white/80 p-4">
-                <div className="text-sm font-bold text-slate-900">Bulk upload menu (CSV)</div>
+                <div className="text-sm font-bold text-slate-900">Bulk upload menu (CSV / Excel)</div>
                 <div className="mt-1 text-xs text-slate-500">
-                  Columns: name, price, category, description, type, image, isSpecial, isAvailable
+                  Columns: name, price, category, description, type, image, isSpecial, isAvailable (.csv, .xlsx, .xls)
                 </div>
                 <form className="mt-3 flex flex-wrap items-center gap-3" onSubmit={uploadMenuCsv}>
                   <input
                     type="file"
-                    accept=".csv,text/csv"
+                    accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                     onChange={(e) => handleCsvFileChange(e.target.files?.[0] || null)}
                     className="text-sm text-slate-600"
                   />

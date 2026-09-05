@@ -1,4 +1,5 @@
 const MenuItem = require('../models/MenuItem');
+const XLSX = require('xlsx');
 let parse = null;
 try {
     // csv-parse v5 supports sync parsing from `csv-parse/sync`
@@ -120,6 +121,7 @@ exports.deleteAllMenuItems = async (req, res) => {
 
 function parseBool(value, fallback = false) {
     if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
     if (typeof value !== "string") return fallback;
     const normalized = value.trim().toLowerCase();
     if (["true", "1", "yes", "y"].includes(normalized)) return true;
@@ -129,32 +131,40 @@ function parseBool(value, fallback = false) {
 
 function validateMenuCsv(records) {
     if (!Array.isArray(records) || records.length === 0) {
-        return { items: [], rowErrors: [{ row: 1, message: "CSV is empty" }] };
+        return { items: [], rowErrors: [{ row: 1, message: "File is empty or contains no readable data" }] };
     }
 
     const items = [];
     const rowErrors = [];
     const nameMap = new Map();
 
-    records.forEach((row, index) => {
-        const name = String(row.name || row.title || "").trim();
-        const price = Number(row.price || 0);
+    records.forEach((rawRow, index) => {
+        if (!rawRow || typeof rawRow !== "object") return;
+
+        // Case-insensitive key lookup map
+        const row = {};
+        for (const key of Object.keys(rawRow)) {
+            row[key.trim().toLowerCase()] = rawRow[key];
+        }
+
+        const name = String(row.name || row.title || row.item || row["item name"] || "").trim();
+        const price = Number(row.price || row.rate || row.cost || 0);
         if (!name) {
             rowErrors.push({ row: index + 2, message: "Missing name" });
             return;
         }
-        if (!price || Number.isNaN(price)) {
+        if (!price || Number.isNaN(price) || price < 0) {
             rowErrors.push({ row: index + 2, message: "Invalid price" });
             return;
         }
 
         const category = String(row.category || "Uncategorized").trim() || "Uncategorized";
-        const description = String(row.description || "").trim();
+        const description = String(row.description || row.desc || "").trim();
         const typeRaw = String(row.type || "veg").trim().toLowerCase();
         const type = ["veg", "non-veg", "customer-insights"].includes(typeRaw) ? typeRaw : "veg";
-        const image = String(row.image || row.imageUrl || row.image_url || "").trim();
-        const isSpecial = parseBool(row.isSpecial ?? row.special, false);
-        const isAvailable = parseBool(row.isAvailable ?? row.available, true);
+        const image = String(row.image || row.imageurl || row.image_url || row["image url"] || "").trim();
+        const isSpecial = parseBool(row.isspecial ?? row.special, false);
+        const isAvailable = parseBool(row.isavailable ?? row.available, true);
 
         const item = {
             name,
@@ -168,7 +178,7 @@ function validateMenuCsv(records) {
         };
 
         if (nameMap.has(name.toLowerCase())) {
-            rowErrors.push({ row: index + 2, message: `Duplicate name "${name}" in CSV` });
+            rowErrors.push({ row: index + 2, message: `Duplicate name "${name}" in file` });
             return;
         }
         nameMap.set(name.toLowerCase(), true);
@@ -178,27 +188,55 @@ function validateMenuCsv(records) {
     return { items, rowErrors };
 }
 
-function parseCsvBuffer(fileBuffer) {
-    if (!parse) {
-        throw new Error(
-            'CSV parser is not available. Ensure `csv-parse/sync` is installed correctly on the server.'
-        );
+function parseFileBuffer(fileBuffer, originalname = "") {
+    const ext = originalname.split(".").pop().toLowerCase();
+
+    // 1. If explicitly an Excel file (.xlsx, .xls)
+    if (ext === "xlsx" || ext === "xls") {
+        try {
+            const workbook = XLSX.read(fileBuffer, { type: "buffer" });
+            const sheetName = workbook.SheetNames[0];
+            if (!sheetName) return [];
+            const sheet = workbook.Sheets[sheetName];
+            return XLSX.utils.sheet_to_json(sheet, { defval: "" });
+        } catch (err) {
+            throw new Error("Invalid or corrupted Excel file.");
+        }
     }
-    const csvText = fileBuffer.toString("utf8");
-    return parse(csvText, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true,
-    });
+
+    // 2. Try CSV parsing standard UTF-8 text if available
+    if (parse) {
+        try {
+            const csvText = fileBuffer.toString("utf8");
+            return parse(csvText, {
+                columns: true,
+                skip_empty_lines: true,
+                trim: true,
+            });
+        } catch (csvErr) {
+            // Fall through to XLSX buffer parsing below
+        }
+    }
+
+    // 3. Fallback to XLSX engine (which handles both CSV and Excel binary buffers)
+    try {
+        const workbook = XLSX.read(fileBuffer, { type: "buffer" });
+        const sheetName = workbook.SheetNames[0];
+        if (!sheetName) return [];
+        const sheet = workbook.Sheets[sheetName];
+        return XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    } catch (err) {
+        throw new Error("Unable to parse file. Please upload a valid CSV or Excel (.xlsx / .xls) file.");
+    }
 }
 
 exports.bulkUploadMenuItems = async (req, res) => {
     try {
         const cafeId = getCafeIdForWrite(req);
         if (!cafeId) return res.status(400).json({ message: 'cafeId is required' });
-        if (!req.file?.buffer) return res.status(400).json({ message: "CSV file is required" });
+        if (!req.file?.buffer) return res.status(400).json({ message: "File is required" });
 
-        const records = parseCsvBuffer(req.file.buffer);
+        const records = parseFileBuffer(req.file.buffer, req.file.originalname || "");
         const { items, rowErrors } = validateMenuCsv(records);
 
         if (items.length === 0) {
@@ -226,7 +264,8 @@ exports.bulkUploadMenuItems = async (req, res) => {
             errors: rowErrors,
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Server error', error });
+        console.error("Error in bulkUploadMenuItems:", error);
+        return res.status(400).json({ message: error.message || 'Failed to process file upload', error: error.message });
     }
 };
 
@@ -234,9 +273,9 @@ exports.previewMenuCsv = async (req, res) => {
     try {
         const cafeId = getCafeIdForWrite(req);
         if (!cafeId) return res.status(400).json({ message: 'cafeId is required' });
-        if (!req.file?.buffer) return res.status(400).json({ message: "CSV file is required" });
+        if (!req.file?.buffer) return res.status(400).json({ message: "File is required" });
 
-        const records = parseCsvBuffer(req.file.buffer);
+        const records = parseFileBuffer(req.file.buffer, req.file.originalname || "");
         const { items, rowErrors } = validateMenuCsv(records);
 
         return res.json({
@@ -246,7 +285,8 @@ exports.previewMenuCsv = async (req, res) => {
             preview: items,
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Server error', error });
+        console.error("Error in previewMenuCsv:", error);
+        return res.status(400).json({ message: error.message || 'Failed to process file preview', error: error.message });
     }
 };
 
