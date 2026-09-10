@@ -25,7 +25,7 @@ exports.getCafeById = async (req, res) => {
 
 exports.createCafe = async (req, res) => {
   try {
-    const { name, address, numberOfTables, logoUrl, brandImageUrl, taxPercent, discountType, discountValue, discountPercent, showcaseHighlights, showcaseCommunityNotes, showcaseCommunityShots, showcaseNonSmokingShots, quickOrderItemIds, quickOrderCigarette25Ids, quickOrderCigarette30Ids, quickOrderCategories } = req.body;
+    const { name, address, numberOfTables, logoUrl, brandImageUrl, taxPercent, discountType, discountValue, discountPercent, showcaseHighlights, showcaseCommunityNotes, showcaseCommunityShots, showcaseNonSmokingShots, quickOrderItemIds, quickOrderCigarette25Ids, quickOrderCigarette30Ids, quickOrderCategories, cigaretteCategories } = req.body;
     if (!name) return res.status(400).json({ message: "name is required" });
 
     const cafe = await Cafe.create({
@@ -75,6 +75,9 @@ exports.createCafe = async (req, res) => {
       quickOrderCategories: Array.isArray(quickOrderCategories)
         ? quickOrderCategories.map((c) => String(c || "").trim()).filter(Boolean)
         : undefined,
+      cigaretteCategories: Array.isArray(cigaretteCategories)
+        ? cigaretteCategories.map((c) => String(c || "").trim()).filter(Boolean)
+        : undefined,
     });
 
     const tableCount = cafe.numberOfTables || 0;
@@ -110,7 +113,7 @@ exports.resetTableSessions = async (req, res) => {
 
 exports.updateCafe = async (req, res) => {
   try {
-    const { name, address, numberOfTables, logoUrl, brandImageUrl, isActive, taxPercent, discountType, discountValue, discountPercent, showcaseHighlights, showcaseCommunityNotes, showcaseCommunityShots, showcaseNonSmokingShots, quickOrderItemIds, quickOrderCigarette25Ids, quickOrderCigarette30Ids, quickOrderCategories } = req.body;
+    const { name, address, numberOfTables, logoUrl, brandImageUrl, isActive, taxPercent, discountType, discountValue, discountPercent, showcaseHighlights, showcaseCommunityNotes, showcaseCommunityShots, showcaseNonSmokingShots, quickOrderItemIds, quickOrderCigarette25Ids, quickOrderCigarette30Ids, quickOrderCategories, cigaretteCategories } = req.body;
     const updates = {};
     if (typeof name === "string") updates.name = name;
     if (typeof address === "string") updates.address = address;
@@ -170,6 +173,9 @@ exports.updateCafe = async (req, res) => {
     }
     if (Array.isArray(quickOrderCategories)) {
       updates.quickOrderCategories = quickOrderCategories.map((c) => String(c || "").trim()).filter(Boolean);
+    }
+    if (Array.isArray(cigaretteCategories)) {
+      updates.cigaretteCategories = cigaretteCategories.map((c) => String(c || "").trim()).filter(Boolean);
     }
 
     const cafe = await Cafe.findByIdAndUpdate(req.params.id, updates, { new: true, strict: false });

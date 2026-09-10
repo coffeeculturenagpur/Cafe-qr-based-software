@@ -85,6 +85,7 @@ export function StaffShell({
     navLinks.push({ href: "/admin/menu", label: "Admin dashboard", icon: LayoutDashboard });
     navLinks.push({ href: "/admin/history", label: "Order history", icon: History });
     navLinks.push({ href: "/admin/menu#admin-overview", label: "Revenue overview", icon: LayoutDashboard });
+    navLinks.push({ href: "/admin/menu#admin-cigarettes", label: "Cigarettes counter", icon: LayoutDashboard });
     navLinks.push({ href: "/admin/menu#admin-branding", label: "Branding & settings", icon: LayoutDashboard });
     navLinks.push({ href: "/admin/menu#admin-live-orders", label: "Live orders", icon: LayoutDashboard });
     navLinks.push({ href: "/admin/menu#admin-tables", label: "Table QR codes", icon: LayoutDashboard });

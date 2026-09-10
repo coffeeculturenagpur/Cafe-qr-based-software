@@ -32,6 +32,8 @@ import SoundControl from "../../../components/SoundControl";
 import { AppLoading } from "../../../components/AppLoading";
 import { primeCafeCache } from "../../../lib/cafeClient";
 import { invalidateMenuCache, primeMenuCache } from "../../../lib/menuClient";
+import { CigarettePanel } from "../../../components/staff/CigarettePanel";
+import { resolveCigaretteCategories } from "../../../lib/cigaretteMenu";
 
 function upsertById(list, item) {
   const idx = list.findIndex((x) => x._id === item._id);
@@ -200,6 +202,7 @@ export default function AdminMenuPage() {
     "Pastries",
     "Sides",
     "Dips",
+    "Cigarettes",
   ];
   const [menuCategories, setMenuCategories] = useState(defaultCategories);
 
@@ -300,6 +303,7 @@ export default function AdminMenuPage() {
     quickOrderCigarette25Ids: [],
     quickOrderCigarette30Ids: [],
     quickOrderCategories: [],
+    cigaretteCategories: [],
     showcaseHighlights: [],
     showcaseCommunityNotes: [],
     showcaseCommunityShots: [],
@@ -308,6 +312,7 @@ export default function AdminMenuPage() {
   const [quickOrderCigarette25PickerId, setQuickOrderCigarette25PickerId] = useState("");
   const [quickOrderCigarette30PickerId, setQuickOrderCigarette30PickerId] = useState("");
   const [newQuickOrderCategoryName, setNewQuickOrderCategoryName] = useState("");
+  const [newCigaretteCategoryName, setNewCigaretteCategoryName] = useState("");
   const [showcaseUploading, setShowcaseUploading] = useState(false);
   const [cafeLoading, setCafeLoading] = useState(false);
   const [cafeError, setCafeError] = useState("");
@@ -366,6 +371,7 @@ export default function AdminMenuPage() {
     overview: true,
     quickActions: true,
     quickOrders: true,
+    cigarettes: true,
     branding: true,
     nonSmoking: true,
     liveOrders: true,
@@ -754,6 +760,9 @@ export default function AdminMenuPage() {
         quickOrderCategories: Array.isArray(data?.quickOrderCategories)
           ? data.quickOrderCategories.map((c) => String(c || "").trim()).filter(Boolean)
           : [],
+        cigaretteCategories: Array.isArray(data?.cigaretteCategories)
+          ? data.cigaretteCategories.map((c) => String(c || "").trim()).filter(Boolean)
+          : [],
       });
       setNonSmokingShots(Array.isArray(data?.showcaseNonSmokingShots) ? normalizeImageList(data.showcaseNonSmokingShots) : []);
       setQuickOrderPickerId("");
@@ -916,6 +925,7 @@ export default function AdminMenuPage() {
         quickOrderCigarette25Ids: (cafeForm.quickOrderCigarette25Ids || []).map((id) => String(id || "")).filter(Boolean),
         quickOrderCigarette30Ids: (cafeForm.quickOrderCigarette30Ids || []).map((id) => String(id || "")).filter(Boolean),
         quickOrderCategories: (cafeForm.quickOrderCategories || []).map((c) => String(c || "").trim()).filter(Boolean),
+        cigaretteCategories: (cafeForm.cigaretteCategories || []).map((c) => String(c || "").trim()).filter(Boolean),
         showcaseHighlights: (cafeForm.showcaseHighlights || []).map((it) => ({
           name: it?.name || "",
           note: it?.note || "",
@@ -1015,9 +1025,10 @@ export default function AdminMenuPage() {
       try {
         const body = {
           quickOrderItemIds: (nextForm.quickOrderItemIds || []).map((id) => String(id || "")).filter(Boolean),
-          quickOrderCigarette25Ids: (nextForm.quickOrderCigarette25Ids || []).map((id) => String(id || "")).filter(Boolean),
-          quickOrderCigarette30Ids: (nextForm.quickOrderCigarette30Ids || []).map((id) => String(id || "")).filter(Boolean),
+          quickOrderCigarette25Ids: (nextForm.quickOrderCigarette25Ids || []).map((id) => String(id || "").trim()).filter(Boolean),
+          quickOrderCigarette30Ids: (nextForm.quickOrderCigarette30Ids || []).map((id) => String(id || "").trim()).filter(Boolean),
           quickOrderCategories: (nextForm.quickOrderCategories || []).map((c) => String(c || "").trim()).filter(Boolean),
+          cigaretteCategories: (nextForm.cigaretteCategories || []).map((c) => String(c || "").trim()).filter(Boolean),
         };
         if (role === "super_admin") body.cafeId = cafeIdForAdmin;
 
@@ -1040,6 +1051,9 @@ export default function AdminMenuPage() {
             : [],
           quickOrderCategories: Array.isArray(updated?.quickOrderCategories)
             ? updated.quickOrderCategories.map((c) => String(c || "").trim()).filter(Boolean)
+            : [],
+          cigaretteCategories: Array.isArray(updated?.cigaretteCategories)
+            ? updated.cigaretteCategories.map((c) => String(c || "").trim()).filter(Boolean)
             : [],
         };
         cafeFormRef.current = { ...cafeFormRef.current, ...syncedFields };
@@ -2030,6 +2044,9 @@ export default function AdminMenuPage() {
               {!collapsedSections.quickActions && (
                 <>
                   <div className="mt-5 grid gap-3">
+                    <Link href="/admin/menu#admin-cigarettes" className="rounded-2xl border border-orange-100 bg-white/90 px-4 py-3 font-semibold text-slate-900 transition hover:bg-orange-50">
+                      Cigarettes counter
+                    </Link>
                     <Link href="/admin/menu#admin-live-orders" className="rounded-2xl border border-orange-100 bg-white/90 px-4 py-3 font-semibold text-slate-900 transition hover:bg-orange-50">
                       Live orders
                     </Link>
@@ -2705,6 +2722,90 @@ export default function AdminMenuPage() {
                 {nonSmokingError && <div className="mt-4 text-red-700 font-semibold">{nonSmokingError}</div>}
                 {nonSmokingSuccess && <div className="mt-4 text-emerald-700 font-semibold">{nonSmokingSuccess}</div>}
               </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card id="admin-cigarettes" className="border border-amber-100 shadow-xl">
+          <CardContent>
+            <SectionHeader
+              title="Cigarettes counter"
+              description="Manual counter sales only. Cigarette categories are hidden from the QR menu."
+              actions={(
+                <div className="text-sm font-semibold text-amber-800">
+                  Categories: {resolveCigaretteCategories(cafeForm).join(", ")}
+                </div>
+              )}
+              collapsed={collapsedSections.cigarettes}
+              onToggle={() => toggleSection("cigarettes")}
+            />
+
+            {!collapsedSections.cigarettes && (
+              <div className="mt-4 space-y-4">
+                <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
+                  <div className="font-semibold text-slate-900">Cigarette menu categories</div>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Items in these categories are sold at the counter only (default: Cigarettes).
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(cafeForm.cigaretteCategories || []).length === 0 ? (
+                      <span className="rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-semibold text-amber-900">
+                        Using default: Cigarettes
+                      </span>
+                    ) : (
+                      (cafeForm.cigaretteCategories || []).map((name) => (
+                        <button
+                          key={name}
+                          type="button"
+                          className="rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                          onClick={() => {
+                            const next = (cafeForm.cigaretteCategories || []).filter((c) => c !== name);
+                            saveQuickOrderFields({ cigaretteCategories: next });
+                          }}
+                        >
+                          {name} ×
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Input
+                      placeholder="Add category name"
+                      value={newCigaretteCategoryName}
+                      onChange={(e) => setNewCigaretteCategoryName(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        const name = String(newCigaretteCategoryName || "").trim();
+                        if (!name) return;
+                        const existing = cafeForm.cigaretteCategories || [];
+                        if (existing.some((c) => c.toLowerCase() === name.toLowerCase())) {
+                          setNewCigaretteCategoryName("");
+                          return;
+                        }
+                        saveQuickOrderFields({ cigaretteCategories: [...existing, name] });
+                        setNewCigaretteCategoryName("");
+                      }}
+                    >
+                      Add category
+                    </Button>
+                  </div>
+                </div>
+
+                {tablesCafeId ? (
+                  <CigarettePanel
+                    cafeId={tablesCafeId}
+                    token={getToken()}
+                    cafeInfo={cafeInfo || cafeForm}
+                    canCreate
+                    canMarkPaid
+                  />
+                ) : (
+                  <div className="text-sm text-slate-600">Select a cafe to manage cigarette orders.</div>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>

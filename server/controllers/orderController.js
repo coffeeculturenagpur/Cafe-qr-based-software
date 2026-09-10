@@ -19,6 +19,11 @@ const {
   getTrackedOrderIds,
   upsertSessionState,
 } = require("../services/sessionStore");
+const {
+  buildCigaretteCategorySet,
+  isCigaretteMenuItem,
+  assertItemsMatchOrderType,
+} = require("../utils/cigarettes");
 
 function businessDayStartLocal({ startHour = 1 } = {}) {
   const now = new Date();
@@ -73,7 +78,7 @@ async function resolveOrderItems(cafeId, items, { allowUnavailable = false } = {
   }
 
   const menuDocs = await MenuItem.find(menuQuery)
-    .select("_id name price isAvailable")
+    .select("_id name price isAvailable category")
     .lean();
 
   const menuMap = new Map(menuDocs.map((doc) => [String(doc._id), doc]));
@@ -104,10 +109,10 @@ async function resolveOrderItems(cafeId, items, { allowUnavailable = false } = {
     });
   }
 
-  return { resolvedItems, lineSubtotal };
+  return { resolvedItems, lineSubtotal, menuMap };
 }
 
-async function buildResolvedOrderPayload(cafeId, items) {
+async function buildResolvedOrderPayload(cafeId, items, { allowUnavailable = false } = {}) {
   const cafe = await Cafe.findById(cafeId).lean();
   if (!cafe) {
     const error = new Error("Cafe not found");
@@ -115,10 +120,21 @@ async function buildResolvedOrderPayload(cafeId, items) {
     throw error;
   }
 
-  const { resolvedItems, lineSubtotal } = await resolveOrderItems(cafeId, items);
+  const { resolvedItems, lineSubtotal, menuMap } = await resolveOrderItems(cafeId, items, {
+    allowUnavailable,
+  });
   const { subtotalAmount, discountAmount, taxAmount, totalAmount } = computeOrderTotals(cafe, lineSubtotal);
 
-  return { cafe, resolvedItems, subtotalAmount, discountAmount, taxAmount, totalAmount };
+  return {
+    cafe,
+    resolvedItems,
+    menuMap,
+    cigaretteCategorySet: buildCigaretteCategorySet(cafe),
+    subtotalAmount,
+    discountAmount,
+    taxAmount,
+    totalAmount,
+  };
 }
 
 function buildCustomerOrderOwnershipQuery({ sessionId, customerId, visitId }) {
@@ -222,15 +238,32 @@ function applyOrderStatusTiming(update, previousOrder = null) {
   return update;
 }
 
-async function findActiveOrderForMerge({ cafeId, tableNumber, sessionId, customerId, visitId }) {
+async function findActiveOrderForMerge({
+  cafeId,
+  tableNumber,
+  sessionId,
+  customerId,
+  visitId,
+  orderType = "food",
+}) {
   const ownership = buildCustomerOrderOwnershipQuery({ sessionId, customerId, visitId });
   if (ownership.length === 0) return null;
+
+  const kind = String(orderType || "food").toLowerCase() === "cigarette" ? "cigarette" : "food";
 
   return Order.findOne({
     cafeId,
     tableNumber: Number(tableNumber),
     status: { $nin: ["paid", "rejected"] },
     $or: ownership,
+    $and: [
+      {
+        $or:
+          kind === "cigarette"
+            ? [{ orderType: "cigarette" }]
+            : [{ orderType: "food" }, { orderType: { $exists: false } }, { orderType: null }],
+      },
+    ],
   }).sort({ createdAt: 1 });
 }
 
@@ -308,7 +341,19 @@ exports.createOrder = async (req, res) => {
       cafeId,
     });
 
-    const { resolvedItems, lineSubtotal } = await resolveOrderItems(cafeId, items);
+    const { resolvedItems, lineSubtotal, menuMap } = await resolveOrderItems(cafeId, items);
+    const cigaretteCategorySet = buildCigaretteCategorySet(cafe);
+    const hasCigaretteItem = resolvedItems.some((item) => {
+      const menuDoc = menuMap.get(String(item.menuItemId));
+      return isCigaretteMenuItem(menuDoc, cigaretteCategorySet);
+    });
+    if (hasCigaretteItem) {
+      return res.status(400).json({
+        message:
+          "Cigarettes are not available for QR ordering. Please ask at the counter.",
+      });
+    }
+
     const paymentValue = normalizePaymentMode(paymentMode, "cash");
     const activeOrder = await findActiveOrderForMerge({
       cafeId,
@@ -316,6 +361,7 @@ exports.createOrder = async (req, res) => {
       sessionId,
       customerId: linkedCustomer?._id || null,
       visitId: visit,
+      orderType: "food",
     });
 
     let order;
@@ -370,6 +416,7 @@ exports.createOrder = async (req, res) => {
         totalAmount,
         paymentMode: paymentValue,
         source: "qr",
+        orderType: "food",
         status: "pending",
       });
     }
@@ -419,6 +466,18 @@ exports.listOrdersByCafe = async (req, res) => {
     const q = { cafeId };
     const { from, to, minTotal, maxTotal, status } = req.query;
     const scope = String(req.query.scope || "").trim().toLowerCase();
+    const orderType = String(req.query.orderType || "").trim().toLowerCase();
+
+    if (scope === "cigarette_live" || orderType === "cigarette") {
+      q.orderType = "cigarette";
+    } else if (orderType === "food") {
+      q.$or = [{ orderType: "food" }, { orderType: { $exists: false } }, { orderType: null }];
+    } else if (orderType === "all") {
+      // no orderType filter
+    } else {
+      // Default: food boards exclude cigarette tickets
+      q.$or = [{ orderType: "food" }, { orderType: { $exists: false } }, { orderType: null }];
+    }
 
     if (from || to) {
       q.createdAt = {};
@@ -446,9 +505,13 @@ exports.listOrdersByCafe = async (req, res) => {
       else if (parts.length > 1) q.status = { $in: parts };
     }
 
-    // Waiter/staff should only see live orders after the chef marks them ready.
-    // History view (scope=history) is allowed to see all statuses.
-    if (req.user?.role === "staff" && String(req.query.scope || "") !== "history") {
+    // Waiter/staff should only see live food orders after the chef marks them ready.
+    // Cigarette live board (scope=cigarette_live) and history are allowed broader statuses.
+    if (
+      req.user?.role === "staff" &&
+      scope !== "history" &&
+      scope !== "cigarette_live"
+    ) {
       const staffVisible = ["ready", "served"];
       if (q.status) {
         const current = Array.isArray(q.status.$in)
@@ -458,6 +521,10 @@ exports.listOrdersByCafe = async (req, res) => {
       } else {
         q.status = { $in: staffVisible };
       }
+    }
+
+    if (scope === "cigarette_live") {
+      q.status = { $nin: ["paid", "rejected"] };
     }
 
     const orders = await Order.find(q).sort({ createdAt: -1 }).lean();
@@ -612,6 +679,7 @@ exports.createStaffOrder = async (req, res) => {
     const customerName = String(req.body?.customerName || "").trim() || "Walk-in guest";
     const phone = String(req.body?.phone || "").trim() || (tableNumber ? `manual-table-${tableNumber}` : "manual-walk-in");
     const notes = typeof req.body?.notes === "string" ? req.body.notes.trim() : "";
+    const requestedOrderType = String(req.body?.orderType || "").trim().toLowerCase();
     const status = typeof req.body?.status === "string" ? req.body.status.trim().toLowerCase() : "pending";
 
     if (!cafeId) return res.status(400).json({ message: "cafeId is required" });
@@ -625,11 +693,33 @@ exports.createStaffOrder = async (req, res) => {
       return res.status(400).json({ message: "Invalid status for manual order" });
     }
 
-    const { cafe, resolvedItems, subtotalAmount, discountAmount, taxAmount, totalAmount } =
-      await buildResolvedOrderPayload(cafeId, req.body?.items);
+    const { cafe, resolvedItems, menuMap, cigaretteCategorySet, subtotalAmount, discountAmount, taxAmount, totalAmount } =
+      await buildResolvedOrderPayload(cafeId, req.body?.items, { allowUnavailable: true });
 
     if (cafe.isActive === false) {
       return res.status(403).json({ message: "This cafe is not accepting orders" });
+    }
+
+    const allCigarette = resolvedItems.every((item) =>
+      isCigaretteMenuItem(menuMap.get(String(item.menuItemId)), cigaretteCategorySet)
+    );
+    const anyCigarette = resolvedItems.some((item) =>
+      isCigaretteMenuItem(menuMap.get(String(item.menuItemId)), cigaretteCategorySet)
+    );
+
+    if (anyCigarette && !allCigarette) {
+      return res.status(400).json({ message: "Cigarette and food items cannot be mixed in one order" });
+    }
+
+    const orderType =
+      requestedOrderType === "cigarette" || allCigarette ? "cigarette" : "food";
+
+    if (orderType === "cigarette" && !allCigarette) {
+      return res.status(400).json({ message: "Cigarette orders may only include cigarette menu items" });
+    }
+
+    if (req.user?.role === "staff" && orderType !== "cigarette") {
+      return res.status(403).json({ message: "Waiters may only create cigarette orders" });
     }
 
     const order = await Order.create({
@@ -646,6 +736,7 @@ exports.createStaffOrder = async (req, res) => {
       totalAmount,
       paymentMode: normalizePaymentMode(req.body?.paymentMode, "cash"),
       source: "manual",
+      orderType,
       status,
       ...(status === "accepted"
         ? { acceptedAt: new Date(), servedAt: null, acceptToServeMs: null }
@@ -659,10 +750,13 @@ exports.createStaffOrder = async (req, res) => {
         : {}),
     });
 
-    await Table.findOneAndUpdate(
-      { cafeId, tableNumber },
-      { $set: { status: ["served", "paid", "rejected"].includes(status) ? "free" : "reserved" } }
-    );
+    // Cigarette counter sales should not fight dining table reserved/free state.
+    if (orderType !== "cigarette" && tableNumber) {
+      await Table.findOneAndUpdate(
+        { cafeId, tableNumber },
+        { $set: { status: ["served", "paid", "rejected"].includes(status) ? "free" : "reserved" } }
+      );
+    }
 
     emitCafeEvent(order.cafeId, "NEW_ORDER", order);
     return res.status(201).json(order);
@@ -722,6 +816,10 @@ exports.updateOrder = async (req, res) => {
       delete update.source;
     }
 
+    if (Object.prototype.hasOwnProperty.call(update, "orderType")) {
+      delete update.orderType;
+    }
+
     if (Object.prototype.hasOwnProperty.call(update, "tableNumber")) {
       const rawTableNumber = update.tableNumber;
       const nextTableNumber = rawTableNumber === null || rawTableNumber === "" || typeof rawTableNumber === "undefined"
@@ -749,9 +847,18 @@ exports.updateOrder = async (req, res) => {
       update.notes = typeof update.notes === "string" ? update.notes.trim() : "";
     }
 
+    const prevOrderType =
+      String(prev.orderType || "food").toLowerCase() === "cigarette" ? "cigarette" : "food";
+
     if (Array.isArray(update.items)) {
-      const { resolvedItems, subtotalAmount, discountAmount, taxAmount, totalAmount } =
-        await buildResolvedOrderPayload(String(prev.cafeId), update.items);
+      if (["paid", "rejected"].includes(String(prev.status || "").toLowerCase())) {
+        return res.status(400).json({ message: "Paid or rejected orders cannot be edited" });
+      }
+      const { resolvedItems, menuMap, cigaretteCategorySet, subtotalAmount, discountAmount, taxAmount, totalAmount } =
+        await buildResolvedOrderPayload(String(prev.cafeId), update.items, {
+          allowUnavailable: prevOrderType === "cigarette",
+        });
+      assertItemsMatchOrderType(resolvedItems, menuMap, cigaretteCategorySet, prevOrderType);
       update.items = resolvedItems;
       update.subtotalAmount = subtotalAmount;
       update.discountAmount = discountAmount;
@@ -773,23 +880,29 @@ exports.updateOrder = async (req, res) => {
       if (order.status === "paid") emitCafeEvent(order.cafeId, "ORDER_PAID", order);
     }
 
-    if (["served", "paid", "rejected"].includes(order.status)) {
-      await Table.findOneAndUpdate(
-        { cafeId: order.cafeId, tableNumber: order.tableNumber },
-        { $set: { status: "free" } }
-      );
-    } else if (["pending", "accepted", "baking", "preparing", "ready"].includes(order.status)) {
-      await Table.findOneAndUpdate(
-        { cafeId: order.cafeId, tableNumber: order.tableNumber },
-        { $set: { status: "reserved" } }
-      );
+    const isCigaretteOrder =
+      String(order.orderType || "food").toLowerCase() === "cigarette";
+
+    if (!isCigaretteOrder) {
+      if (["served", "paid", "rejected"].includes(order.status)) {
+        await Table.findOneAndUpdate(
+          { cafeId: order.cafeId, tableNumber: order.tableNumber },
+          { $set: { status: "free" } }
+        );
+      } else if (["pending", "accepted", "baking", "preparing", "ready"].includes(order.status)) {
+        await Table.findOneAndUpdate(
+          { cafeId: order.cafeId, tableNumber: order.tableNumber },
+          { $set: { status: "reserved" } }
+        );
+      }
     }
 
-    if (prevTableNumber && prevTableNumber !== Number(order.tableNumber)) {
+    if (!isCigaretteOrder && prevTableNumber && prevTableNumber !== Number(order.tableNumber)) {
       const oldTableHasActiveOrders = await Order.exists({
         cafeId: order.cafeId,
         tableNumber: prevTableNumber,
         status: { $nin: ["served", "paid", "rejected"] },
+        orderType: { $ne: "cigarette" },
         _id: { $ne: order._id },
       });
 

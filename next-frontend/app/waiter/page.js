@@ -21,6 +21,7 @@ import { groupOrdersByTable } from "../../lib/orderGrouping";
 import { getOrderStatusPalette } from "../../lib/orderStatusPalette";
 import { formatOrderAcceptedAt, formatOrderAcceptToServe, formatOrderServedAt } from "../../lib/orderTiming";
 import { TableStatusPad } from "../../components/staff/TableStatusPad";
+import { CigarettePanel } from "../../components/staff/CigarettePanel";
 import { ChevronDown, X } from "lucide-react";
 
 function upsertOrder(list, order) {
@@ -78,6 +79,7 @@ export default function WaiterPage() {
   const [expandedTables, setExpandedTables] = useState({});
   const [selectedTableKey, setSelectedTableKey] = useState("");
   const [blinkingTables, setBlinkingTables] = useState({});
+  const [activeTab, setActiveTab] = useState("tables");
   const tableCardRefs = useRef({});
 
   const stats = useMemo(() => {
@@ -619,11 +621,41 @@ export default function WaiterPage() {
           </Button>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab("tables")}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+              activeTab === "tables"
+                ? "bg-orange-600 text-white shadow"
+                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            Tables
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("cigarettes")}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+              activeTab === "cigarettes"
+                ? "bg-amber-700 text-white shadow"
+                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            Cigarettes
+          </button>
+        </div>
+
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-600">
           <span>Paid orders move to History automatically.</span>
           <span>Prepared = Ready.</span>
+          <span>Cigarettes are counter-only (not on QR menu).</span>
         </div>
 
+        {activeTab === "cigarettes" ? (
+          <CigarettePanel cafeId={cafeId} token={token} cafeInfo={cafeInfo} canCreate canMarkPaid />
+        ) : (
+          <>
         {readyNotice && (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 shadow">
             Order ready for Table {readyNotice.tableNumber}{" "}
@@ -1093,6 +1125,8 @@ export default function WaiterPage() {
             </div>
           </div>
         ) : null}
+          </>
+        )}
       </div>
     </StaffShell>
   );

@@ -1,3 +1,11 @@
+export function isCigaretteOrder(order) {
+  return String(order?.orderType || "").trim().toLowerCase() === "cigarette";
+}
+
+export function isFoodOrder(order) {
+  return !isCigaretteOrder(order);
+}
+
 function normalizeStatus(order) {
   return typeof order?.status === "string" ? order.status.trim().toLowerCase() : "";
 }
@@ -11,19 +19,31 @@ const WAITER_LIVE_VISIBLE = new Set(["ready", "served"]);
 /** Statuses hidden from admin live orders list (completed). */
 const ADMIN_LIVE_EXCLUDED = new Set(["paid", "rejected"]);
 
+/** Cigarette live board — open counter tickets. */
+const CIGARETTE_LIVE_EXCLUDED = new Set(["paid", "rejected"]);
+
 export function isKitchenLiveOrder(order) {
+  if (isCigaretteOrder(order)) return false;
   const status = normalizeStatus(order);
   return status && !KITCHEN_LIVE_EXCLUDED.has(status);
 }
 
 export function isWaiterLiveOrder(order) {
+  if (isCigaretteOrder(order)) return false;
   const status = normalizeStatus(order);
   return status && WAITER_LIVE_VISIBLE.has(status);
 }
 
 export function isAdminLiveOrder(order) {
+  if (isCigaretteOrder(order)) return false;
   const status = normalizeStatus(order);
   return status && !ADMIN_LIVE_EXCLUDED.has(status);
+}
+
+export function isCigaretteLiveOrder(order) {
+  if (!isCigaretteOrder(order)) return false;
+  const status = normalizeStatus(order);
+  return status && !CIGARETTE_LIVE_EXCLUDED.has(status);
 }
 
 export function filterKitchenLiveOrders(orders) {
@@ -39,4 +59,9 @@ export function filterWaiterLiveOrders(orders) {
 export function filterAdminLiveOrders(orders) {
   if (!Array.isArray(orders)) return [];
   return orders.filter(isAdminLiveOrder);
+}
+
+export function filterCigaretteLiveOrders(orders) {
+  if (!Array.isArray(orders)) return [];
+  return orders.filter(isCigaretteLiveOrder);
 }

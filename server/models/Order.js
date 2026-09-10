@@ -47,6 +47,14 @@ const orderSchema = new mongoose.Schema(
       default: "qr",
     },
 
+    /** Separates counter cigarette tickets from dining/food orders */
+    orderType: {
+      type: String,
+      enum: ["food", "cigarette"],
+      default: "food",
+      index: true,
+    },
+
     status: {
       type: String,
       enum: ["pending", "accepted", "baking", "preparing", "ready", "served", "paid", "rejected"],
@@ -62,6 +70,7 @@ const orderSchema = new mongoose.Schema(
 );
 
 orderSchema.index({ cafeId: 1, createdAt: -1 });
+orderSchema.index({ cafeId: 1, orderType: 1, status: 1, createdAt: -1 });
 orderSchema.index({ cafeId: 1, tableNumber: 1, visitId: 1 });
 orderSchema.index({ cafeId: 1, tableNumber: 1, sessionId: 1 });
 orderSchema.index({ cafeId: 1, tableNumber: 1, customerId: 1 });

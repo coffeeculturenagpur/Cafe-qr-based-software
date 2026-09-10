@@ -30,6 +30,14 @@ const cafeSchema = new mongoose.Schema(
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: "MenuItem" }],
       default: [],
     },
+    /**
+     * Menu categories treated as cigarettes (counter-only; hidden from QR menu).
+     * Empty → defaults to ["Cigarettes"].
+     */
+    cigaretteCategories: {
+      type: [{ type: String, trim: true }],
+      default: [],
+    },
     /** Admin-managed ordered list of category names shown in the kitchen quick-order grid */
     quickOrderCategories: {
       type: [{ type: String, trim: true }],

@@ -1,5 +1,8 @@
 const mongoose = require("mongoose");
 const MenuItem = require("../models/MenuItem");
+const Cafe = require("../models/Cafe");
+const { buildCigaretteCategorySet, isCigaretteCategory } = require("../utils/cigarettes");
+const { canAccessCafe, forbiddenTenant } = require("../utils/tenant");
 
 let parse = null;
 try {
@@ -40,7 +43,18 @@ const getCafeIdForWrite = (req) => {
   return req.user?.cafeId || req.body?.cafeId || req.query?.cafeId || null;
 };
 
-// get all items
+async function getCigaretteCategorySetForCafe(cafeId) {
+  const cafe = await Cafe.findById(cafeId).select("cigaretteCategories").lean();
+  return buildCigaretteCategorySet(cafe || {});
+}
+
+function excludeCigaretteItems(items, categorySet) {
+  return (Array.isArray(items) ? items : []).filter(
+    (item) => !isCigaretteCategory(item?.category, categorySet)
+  );
+}
+
+// get all items (customer / QR — cigarettes excluded; counter-only)
 exports.getAvailableItems = async (req, res) => {
   try {
     const rawCafeId = getCafeIdFromRequest(req);
@@ -48,8 +62,9 @@ exports.getAvailableItems = async (req, res) => {
     const cafeId = toValidObjectId(rawCafeId);
     if (!cafeId) return res.status(400).json({ message: "Invalid cafeId" });
 
+    const categorySet = await getCigaretteCategorySetForCafe(cafeId);
     const items = await MenuItem.find({ cafeId, isAvailable: true }).sort({ category: 1, name: 1 }).lean();
-    return res.json(items);
+    return res.json(excludeCigaretteItems(items, categorySet));
   } catch (error) {
     console.error("getAvailableItems error:", error);
     return res.status(500).json({ message: error.message || "Server error", error: error.message });
@@ -65,6 +80,11 @@ exports.getItemsByCategory = async (req, res) => {
     const cafeId = toValidObjectId(rawCafeId);
     if (!cafeId) return res.status(400).json({ message: "Invalid cafeId" });
 
+    const categorySet = await getCigaretteCategorySetForCafe(cafeId);
+    if (isCigaretteCategory(category, categorySet)) {
+      return res.json([]);
+    }
+
     const items = await MenuItem.find({ cafeId, category, isAvailable: true }).sort({ name: 1 }).lean();
     return res.json(items);
   } catch (error) {
@@ -73,7 +93,7 @@ exports.getItemsByCategory = async (req, res) => {
   }
 };
 
-// Tenant-scoped menu listing
+// Tenant-scoped menu listing (customer / QR — cigarettes excluded)
 exports.getMenuByCafe = async (req, res) => {
   try {
     const rawCafeId = getCafeIdFromRequest(req);
@@ -81,10 +101,28 @@ exports.getMenuByCafe = async (req, res) => {
     const cafeId = toValidObjectId(rawCafeId);
     if (!cafeId) return res.status(400).json({ message: "Invalid cafeId" });
 
+    const categorySet = await getCigaretteCategorySetForCafe(cafeId);
+    const items = await MenuItem.find({ cafeId, isAvailable: true }).sort({ category: 1, name: 1 }).lean();
+    return res.json(excludeCigaretteItems(items, categorySet));
+  } catch (error) {
+    console.error("getMenuByCafe error:", error);
+    return res.status(500).json({ message: error.message || "Server error", error: error.message });
+  }
+};
+
+/** Staff menu including cigarette items (counter sales). */
+exports.getStaffMenuByCafe = async (req, res) => {
+  try {
+    const rawCafeId = getCafeIdFromRequest(req);
+    if (!rawCafeId) return res.status(400).json({ message: "cafeId is required" });
+    const cafeId = toValidObjectId(rawCafeId);
+    if (!cafeId) return res.status(400).json({ message: "Invalid cafeId" });
+    if (!canAccessCafe(req.user, String(cafeId))) return forbiddenTenant(res);
+
     const items = await MenuItem.find({ cafeId, isAvailable: true }).sort({ category: 1, name: 1 }).lean();
     return res.json(items);
   } catch (error) {
-    console.error("getMenuByCafe error:", error);
+    console.error("getStaffMenuByCafe error:", error);
     return res.status(500).json({ message: error.message || "Server error", error: error.message });
   }
 };

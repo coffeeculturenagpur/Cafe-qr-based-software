@@ -6,6 +6,12 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 // customer routes
 router.get('/available', menuController.getAvailableItems);
 router.get('/category/:category', menuController.getItemsByCategory);
+router.get(
+  '/:cafeId/staff',
+  requireAuth,
+  requireRole(['kitchen', 'staff', 'cafe_admin', 'super_admin']),
+  menuController.getStaffMenuByCafe
+);
 router.get('/:cafeId', menuController.getMenuByCafe);
 
 //admin routes

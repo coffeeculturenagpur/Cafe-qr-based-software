@@ -37,6 +37,7 @@ import {
   formatOrderServedAt,
 } from "../../lib/orderTiming";
 import { TableStatusPad } from "../../components/staff/TableStatusPad";
+import { CigarettePanel } from "../../components/staff/CigarettePanel";
 import { ChevronDown, ClipboardList, QrCode, X, Check, Printer } from "lucide-react";
 import {
   buildQuickOrderCategoryLookup,
@@ -201,6 +202,7 @@ export default function KitchenPage() {
   const [expandedTables, setExpandedTables] = useState({});
   const [selectedTableKey, setSelectedTableKey] = useState("");
   const [blinkingTables, setBlinkingTables] = useState({});
+  const [kitchenTab, setKitchenTab] = useState("kitchen");
   const tableCardRefs = useRef({});
   const pendingAlertOrderIdsRef = useRef(new Set());
 
@@ -1465,6 +1467,35 @@ export default function KitchenPage() {
           </div>
         )}
 
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setKitchenTab("kitchen")}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+              kitchenTab === "kitchen"
+                ? "bg-orange-600 text-white shadow"
+                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            }`}
+          >
+            Kitchen
+          </button>
+          <button
+            type="button"
+            onClick={() => setKitchenTab("cigarettes")}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+              kitchenTab === "cigarettes"
+                ? "bg-amber-700 text-white shadow"
+                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            }`}
+          >
+            Cigarettes
+          </button>
+        </div>
+
+        {kitchenTab === "cigarettes" ? (
+          <CigarettePanel cafeId={cafeId} token={token} cafeInfo={cafeInfo} canCreate canMarkPaid />
+        ) : (
+          <>
         {/* ── Category grid ── */}
         <div className="rounded-2xl border border-dashed border-orange-200/70 bg-white/55 px-4 py-4 shadow-sm backdrop-blur-sm dark:border-white/[0.06] dark:bg-slate-900/40">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -2396,6 +2427,8 @@ export default function KitchenPage() {
               ? "No orders match your search or source filter. Try clearing filters or refresh."
               : "No active orders on the board yet."}
           </div>
+        )}
+          </>
         )}
         {selectedGroup ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-[2px]">

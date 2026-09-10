@@ -169,6 +169,11 @@ exports.updateCafe = async (req, res) => {
         .map((c) => String(c || "").trim())
         .filter(Boolean);
     }
+    if (Array.isArray(req.body.cigaretteCategories)) {
+      updates.cigaretteCategories = req.body.cigaretteCategories
+        .map((c) => String(c || "").trim())
+        .filter(Boolean);
+    }
 
     let incomingLen = 0;
     let filteredLen = 0;

@@ -7,7 +7,7 @@ router.post("/", orderController.createOrder);
 router.post(
   "/staff",
   requireAuth,
-  requireRole(["kitchen", "cafe_admin", "super_admin"]),
+  requireRole(["kitchen", "staff", "cafe_admin", "super_admin"]),
   orderController.createStaffOrder
 );
 router.get("/venue/table/:tableNumber", orderController.listOrdersByTableVenue);
