@@ -36,6 +36,7 @@ const allowedOrigins = [
   "http://localhost:3000",
   "https://cafe-qr-based-software.onrender.com",
   "https://www.coffeeculturenagpur.com",
+  "https://coffeeculturenagpur.com",
   "https://cafe-qr-based-software.vercel.app",
 ];
 
@@ -49,12 +50,15 @@ function isAllowedOrigin(origin) {
 app.use(
   cors({
     origin: (origin, callback) => {
+      // Prefer false over Error so denied preflights still get a clean response
+      // instead of a 500 that browsers report as a CORS failure.
       if (isAllowedOrigin(origin)) return callback(null, true);
-      return callback(new Error("Not allowed by CORS"));
+      return callback(null, false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 204,
   })
 );
 app.use(cookieParser());

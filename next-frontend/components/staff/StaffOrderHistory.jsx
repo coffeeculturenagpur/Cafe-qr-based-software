@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../../lib/api";
 import { authHeaders } from "../../lib/auth";
 import { useClientAuth } from "../../lib/useClientAuth";
+import { isCigaretteOrder } from "../../lib/staffOrderFilters";
 import { Button } from "../ui/Button";
 import { Card, CardContent } from "../ui/Card";
 import { Input } from "../ui/Input";
@@ -22,6 +23,8 @@ export default function StaffOrderHistory({ title, backHref, roleGate, dashboard
   const [minTotal, setMinTotal] = useState("");
   const [maxTotal, setMaxTotal] = useState("");
   const [status, setStatus] = useState("");
+  /** @type {"all" | "food" | "cigarette"} */
+  const [orderType, setOrderType] = useState("all");
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -52,6 +55,7 @@ export default function StaffOrderHistory({ title, backHref, roleGate, dashboard
       if (maxTotal !== "") qs.set("maxTotal", String(maxTotal));
       if (status.trim()) qs.set("status", status.trim());
       qs.set("scope", "history");
+      qs.set("orderType", orderType || "all");
       const q = qs.toString();
       const list = await apiFetch(`/api/orders/${cafeId}${q ? `?${q}` : ""}`, {
         headers: { ...(token ? authHeaders() : {}) },
@@ -66,12 +70,12 @@ export default function StaffOrderHistory({ title, backHref, roleGate, dashboard
 
   useEffect(() => {
     if (!authReady || !cafeId || !from || !to) return;
-    const key = `${cafeId}:${from}:${to}`;
+    const key = `${cafeId}:${from}:${to}:${orderType}`;
     if (autoLoadedRef.current === key) return;
     autoLoadedRef.current = key;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, cafeId, from, to]);
+  }, [authReady, cafeId, from, to, orderType]);
 
   if (!authReady) {
     return (
@@ -90,7 +94,7 @@ export default function StaffOrderHistory({ title, backHref, roleGate, dashboard
         onRefresh: load,
       }}
       title={title}
-      subtitle="Filter past orders by date and amount."
+      subtitle="Filter past orders by date, type, and amount."
       contentClassName="mx-auto max-w-6xl space-y-8 px-4 sm:px-6"
     >
       {!user?.cafeId && (
@@ -128,13 +132,27 @@ export default function StaffOrderHistory({ title, backHref, roleGate, dashboard
               <Input value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="optional" />
             </div>
           </div>
-          <div>
-            <div className="text-xs font-semibold text-slate-500">Status (comma-separated)</div>
-            <Input
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              placeholder="paid, served, ready"
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <div className="text-xs font-semibold text-slate-500">Order type</div>
+              <select
+                className="mt-1 w-full rounded-2xl border border-slate-200 bg-white/90 p-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-300/70 dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-100"
+                value={orderType}
+                onChange={(e) => setOrderType(e.target.value)}
+              >
+                <option value="all">All orders</option>
+                <option value="food">Food only</option>
+                <option value="cigarette">Cigarettes only</option>
+              </select>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-slate-500">Status (comma-separated)</div>
+              <Input
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                placeholder="paid, served, ready"
+              />
+            </div>
           </div>
           <Button onClick={load} disabled={!cafeId || loading}>
             {loading ? "Loading…" : "Apply filters"}
@@ -144,39 +162,62 @@ export default function StaffOrderHistory({ title, backHref, roleGate, dashboard
       </Card>
 
       <div className="space-y-3">
-        {orders.map((o) => (
-          <Card key={o._id} className="border border-slate-200 shadow-sm">
-            <CardContent>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="font-bold text-slate-900">
-                  #{String(o._id).slice(-6)} · Table {o.tableNumber}
+        {orders.map((o) => {
+          const cigarette = isCigaretteOrder(o);
+          const tableLabel =
+            Number(o.tableNumber || 0) > 0 ? `Table ${o.tableNumber}` : "Walk-in";
+          return (
+            <Card key={o._id} className="border border-slate-200 shadow-sm">
+              <CardContent>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-bold text-slate-900">
+                    #{String(o._id).slice(-6)} · {tableLabel}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {cigarette ? (
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+                        Cigarette
+                      </span>
+                    ) : (
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">
+                        Food
+                      </span>
+                    )}
+                    <div className="text-xs font-semibold uppercase text-orange-700">{o.status}</div>
+                  </div>
                 </div>
-                <div className="text-xs font-semibold uppercase text-orange-700">{o.status}</div>
-              </div>
-              <div className="mt-1 text-xs text-slate-500">
-                {o.createdAt ? new Date(o.createdAt).toLocaleString() : ""}
-              </div>
-              <div className="mt-2 text-sm text-slate-700">
-                {o.customerName} · {o.phone}
-              </div>
-              {o.paymentMode && (
-                <div className="mt-1 text-xs font-semibold text-slate-500">
-                  Payment: {String(o.paymentMode).toUpperCase()}
+                <div className="mt-1 text-xs text-slate-500">
+                  {o.createdAt ? new Date(o.createdAt).toLocaleString() : ""}
                 </div>
-              )}
-              {o.notes ? (
-                <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Order note</div>
-                  <div className="mt-1 break-words">{o.notes}</div>
+                <div className="mt-2 text-sm text-slate-700">
+                  {o.customerName} · {o.phone}
                 </div>
-              ) : null}
-              <div className="mt-2 flex justify-between text-sm font-semibold text-slate-900">
-                <span>Total</span>
-                <span>INR {Number(o.totalAmount || 0).toFixed(2)}</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                {Array.isArray(o.items) && o.items.length > 0 ? (
+                  <div className="mt-2 text-xs text-slate-600">
+                    {o.items
+                      .map((it) => `${it.name} ×${it.qty}`)
+                      .join(" · ")}
+                  </div>
+                ) : null}
+                {o.paymentMode && (
+                  <div className="mt-1 text-xs font-semibold text-slate-500">
+                    Payment: {String(o.paymentMode).toUpperCase()}
+                  </div>
+                )}
+                {o.notes ? (
+                  <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Order note</div>
+                    <div className="mt-1 break-words">{o.notes}</div>
+                  </div>
+                ) : null}
+                <div className="mt-2 flex justify-between text-sm font-semibold text-slate-900">
+                  <span>Total</span>
+                  <span>INR {Number(o.totalAmount || 0).toFixed(2)}</span>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
         {!loading && cafeId && orders.length === 0 && (
           <div className="text-sm text-slate-600">No orders match these filters.</div>
         )}

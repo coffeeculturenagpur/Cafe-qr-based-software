@@ -472,10 +472,10 @@ exports.listOrdersByCafe = async (req, res) => {
       q.orderType = "cigarette";
     } else if (orderType === "food") {
       q.$or = [{ orderType: "food" }, { orderType: { $exists: false } }, { orderType: null }];
-    } else if (orderType === "all") {
-      // no orderType filter
+    } else if (orderType === "all" || scope === "history") {
+      // History (and explicit all) includes food + cigarette tickets
     } else {
-      // Default: food boards exclude cigarette tickets
+      // Default live boards: exclude cigarette tickets
       q.$or = [{ orderType: "food" }, { orderType: { $exists: false } }, { orderType: null }];
     }
 
