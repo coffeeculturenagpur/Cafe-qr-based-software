@@ -336,8 +336,9 @@ export function CigarettePanel({
 
           {cigaretteItems.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-              No cigarette menu items found. In Admin, set items under a category named{" "}
-              <strong>Cigarettes</strong> (or add that name in cigarette categories).
+              No cigarette menu items found. In Admin → Menu items, set the item{" "}
+              <strong>Category</strong> to <strong>Cigarette</strong> or{" "}
+              <strong>Cigarettes</strong> (same spelling as on the menu card), then click Refresh.
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">

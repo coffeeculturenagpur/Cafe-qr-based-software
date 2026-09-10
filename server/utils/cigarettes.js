@@ -1,4 +1,4 @@
-const DEFAULT_CIGARETTE_CATEGORIES = ["Cigarettes"];
+const DEFAULT_CIGARETTE_CATEGORIES = ["Cigarettes", "Cigarette"];
 
 function normalizeCategory(value) {
   return String(value || "")
@@ -8,10 +8,18 @@ function normalizeCategory(value) {
 }
 
 function resolveCigaretteCategories(cafe) {
-  const list = Array.isArray(cafe?.cigaretteCategories)
+  const configured = Array.isArray(cafe?.cigaretteCategories)
     ? cafe.cigaretteCategories.map((c) => String(c || "").trim()).filter(Boolean)
     : [];
-  return list.length > 0 ? list : DEFAULT_CIGARETTE_CATEGORIES;
+  // Always keep the default Cigarette/Cigarettes names so menu items show up
+  // even when admins also add extra category aliases.
+  const merged = [...DEFAULT_CIGARETTE_CATEGORIES];
+  for (const name of configured) {
+    if (!merged.some((existing) => normalizeCategory(existing) === normalizeCategory(name))) {
+      merged.push(name);
+    }
+  }
+  return merged;
 }
 
 function buildCigaretteCategorySet(cafe) {
@@ -20,8 +28,12 @@ function buildCigaretteCategorySet(cafe) {
 
 function isCigaretteCategory(category, categorySet) {
   const normalized = normalizeCategory(category);
-  if (!normalized || !(categorySet instanceof Set) || categorySet.size === 0) return false;
-  return categorySet.has(normalized);
+  if (!normalized) return false;
+  if (categorySet instanceof Set && categorySet.size > 0 && categorySet.has(normalized)) {
+    return true;
+  }
+  // Fallback: any category whose name contains "cigaret" (covers Cigarette / Cigarettes)
+  return normalized.includes("cigaret");
 }
 
 function isCigaretteMenuItem(menuDoc, categorySet) {

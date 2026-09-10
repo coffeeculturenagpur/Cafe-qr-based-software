@@ -2,7 +2,7 @@
  * Client-side helpers for cigarette menu categories (mirrors server/utils/cigarettes.js).
  */
 
-export const DEFAULT_CIGARETTE_CATEGORIES = ["Cigarettes"];
+export const DEFAULT_CIGARETTE_CATEGORIES = ["Cigarettes", "Cigarette"];
 
 export function normalizeCigaretteCategory(value) {
   return String(value || "")
@@ -12,10 +12,16 @@ export function normalizeCigaretteCategory(value) {
 }
 
 export function resolveCigaretteCategories(cafeInfo) {
-  const list = Array.isArray(cafeInfo?.cigaretteCategories)
+  const configured = Array.isArray(cafeInfo?.cigaretteCategories)
     ? cafeInfo.cigaretteCategories.map((c) => String(c || "").trim()).filter(Boolean)
     : [];
-  return list.length > 0 ? list : DEFAULT_CIGARETTE_CATEGORIES;
+  const merged = [...DEFAULT_CIGARETTE_CATEGORIES];
+  for (const name of configured) {
+    if (!merged.some((existing) => normalizeCigaretteCategory(existing) === normalizeCigaretteCategory(name))) {
+      merged.push(name);
+    }
+  }
+  return merged;
 }
 
 export function buildCigaretteCategorySet(cafeInfo) {
@@ -26,7 +32,9 @@ export function isCigaretteMenuItem(item, cafeInfoOrSet) {
   const set =
     cafeInfoOrSet instanceof Set ? cafeInfoOrSet : buildCigaretteCategorySet(cafeInfoOrSet);
   const normalized = normalizeCigaretteCategory(item?.category);
-  return Boolean(normalized && set.has(normalized));
+  if (!normalized) return false;
+  if (set.has(normalized)) return true;
+  return normalized.includes("cigaret");
 }
 
 export function filterCigaretteMenuItems(menuItems, cafeInfo) {
