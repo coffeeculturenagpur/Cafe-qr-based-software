@@ -480,7 +480,7 @@ export default function CartPage() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 300, damping: 25 }}
-            className="fixed bottom-24 left-1/2 z-50 w-[min(480px,calc(100%-2rem))] -translate-x-1/2 rounded-3xl border border-emerald-100 bg-white/95 p-4 shadow-xl backdrop-blur-md"
+            className="fixed inset-x-4 bottom-24 z-50 mx-auto w-auto max-w-lg rounded-3xl border border-emerald-100 bg-white/95 p-4 shadow-xl backdrop-blur-md"
           >
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/20">

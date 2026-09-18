@@ -34,9 +34,6 @@ export default function OrdersPage() {
   const tableNumber = useMemo(() => searchParams.get("table"), [searchParams]);
   const tableToken = useMemo(() => searchParams.get("t") || "", [searchParams]);
 
-  const COFFEE_CULTURE_LOGO_URL =
-    "https://res.cloudinary.com/cafe-restaurants/image/upload/v1774080951/qrdine/godexhv2hm06cm1epkqo.jpg";
-
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -169,18 +166,22 @@ export default function OrdersPage() {
             <button
               type="button"
               onClick={() => router.push(`/${cafeId}/menu?table=${tableNumber}&t=${encodeURIComponent(tableToken)}`)}
-              className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm"
+              className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm"
               aria-label="Back to menu"
             >
-              <Image
-                src={COFFEE_CULTURE_LOGO_URL}
-                alt="Coffee Culture logo"
-                fill
-                unoptimized
-                sizes="36px"
-                priority
-                className="object-cover"
-              />
+              {cafeInfo?.logoUrl ? (
+                <Image
+                  src={cafeInfo.logoUrl}
+                  alt={cafeInfo?.name || "Cafe"}
+                  fill
+                  unoptimized
+                  sizes="40px"
+                  priority
+                  className="object-contain p-0.5"
+                />
+              ) : (
+                <ArrowLeft size={18} className="text-slate-900" />
+              )}
             </button>
             <div className="min-w-0 flex-1 text-center">
               <div className="text-xs text-slate-500">Table {tableNumber || "?"}</div>
