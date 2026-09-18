@@ -10,8 +10,8 @@ function normalizeStatus(order) {
   return typeof order?.status === "string" ? order.status.trim().toLowerCase() : "";
 }
 
-/** Statuses hidden from kitchen live board (handed off or completed). */
-const KITCHEN_LIVE_EXCLUDED = new Set(["ready", "served", "paid", "rejected"]);
+/** Statuses hidden from chef live board after the order is fully completed. */
+const KITCHEN_LIVE_EXCLUDED = new Set(["paid", "rejected"]);
 
 /** Statuses visible on waiter live board (ready to serve or in service). */
 const WAITER_LIVE_VISIBLE = new Set(["ready", "served"]);

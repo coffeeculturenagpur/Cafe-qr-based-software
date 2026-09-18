@@ -76,7 +76,7 @@ export function StaffShell({
 
   const navLinks = [];
   if (staffNav?.variant === "kitchen") {
-    navLinks.push({ href: "/kitchen", label: "Kitchen dashboard", icon: LayoutDashboard });
+    navLinks.push({ href: "/kitchen", label: "Chef dashboard", icon: LayoutDashboard });
     navLinks.push({ href: staffNav.historyHref || "/kitchen/history", label: "Order history", icon: History });
   } else if (staffNav?.variant === "waiter") {
     navLinks.push({ href: "/waiter", label: "Waiter dashboard", icon: LayoutDashboard });

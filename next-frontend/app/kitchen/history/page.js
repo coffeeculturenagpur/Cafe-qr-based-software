@@ -3,10 +3,10 @@ import StaffOrderHistory from "../../../components/staff/StaffOrderHistory";
 export default function KitchenHistoryPage() {
   return (
     <StaffOrderHistory
-      title="Order history — Kitchen"
+      title="Order history — Chef"
       backHref="/kitchen"
       roleGate="kitchen"
-      dashboardLabel="Kitchen dashboard"
+      dashboardLabel="Chef dashboard"
     />
   );
 }

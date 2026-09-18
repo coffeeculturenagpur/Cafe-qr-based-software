@@ -88,8 +88,17 @@ function kitchenActionButtonClass(kind) {
   if (kind === "ready") {
     return `${shared} border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100`;
   }
+  if (kind === "served") {
+    return `${shared} border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100`;
+  }
+  if (kind === "paid") {
+    return `${shared} border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100`;
+  }
   if (kind === "rejected") {
     return `${shared} border-red-200 bg-red-50 text-red-800 hover:bg-red-100`;
+  }
+  if (kind === "print") {
+    return `${shared} border-slate-300 bg-white text-slate-900 hover:bg-slate-100`;
   }
   return shared;
 }
@@ -1320,7 +1329,7 @@ export default function KitchenPage() {
 
   if (!authReady) {
     return (
-      <StaffShell title="Kitchen dashboard" subtitle="Loading…">
+      <StaffShell title="Chef dashboard" subtitle="Loading…">
         <AppLoading label="Authenticating" />
       </StaffShell>
     );
@@ -1338,8 +1347,8 @@ export default function KitchenPage() {
           Kitchen Operations
         </span>
       }
-      title="Kitchen dashboard"
-      subtitle="Live orders, prep status, and handoff tracking."
+      title="Chef dashboard"
+      subtitle="Take orders, prepare them, serve guests, and complete payment from one dashboard."
       actions={
         <>
           <SoundControl />
@@ -2671,7 +2680,7 @@ export default function KitchenPage() {
                             <div className="mb-2 px-1 text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-500">
                               Quick Actions
                             </div>
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-9">
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -2712,6 +2721,24 @@ export default function KitchenPage() {
                                 Ready
                               </Button>
                               <Button
+                                variant="outline"
+                                size="sm"
+                                className={kitchenActionButtonClass("served")}
+                                onClick={() => setStatus(o._id, "served")}
+                                disabled={loading}
+                              >
+                                Served
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className={kitchenActionButtonClass("paid")}
+                                onClick={() => setStatus(o._id, "paid")}
+                                disabled={loading}
+                              >
+                                Paid
+                              </Button>
+                              <Button
                                 variant="danger"
                                 size="sm"
                                 className={kitchenActionButtonClass("rejected")}
@@ -2723,11 +2750,11 @@ export default function KitchenPage() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="w-full justify-center px-1.5 py-1 text-[11px] font-extrabold border-slate-200 text-slate-800 hover:bg-slate-100"
+                                className={kitchenActionButtonClass("print")}
                                 onClick={() => printReceipt(o)}
                                 disabled={loading}
                               >
-                                Print
+                                Print bill
                               </Button>
                             </div>
                           </div>

@@ -505,8 +505,8 @@ exports.listOrdersByCafe = async (req, res) => {
       else if (parts.length > 1) q.status = { $in: parts };
     }
 
-    // Waiter/staff should only see live food orders after the chef marks them ready.
-    // Cigarette live board (scope=cigarette_live) and history are allowed broader statuses.
+    // Waiters only see food orders after the chef marks them ready. The chef
+    // dashboard owns the full live lifecycle, including service and payment.
     if (
       req.user?.role === "staff" &&
       scope !== "history" &&
