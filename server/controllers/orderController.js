@@ -676,14 +676,16 @@ exports.createStaffOrder = async (req, res) => {
     const tableNumber = rawTableNumber === null || rawTableNumber === "" || typeof rawTableNumber === "undefined"
       ? null
       : Number(rawTableNumber);
-    const customerName = String(req.body?.customerName || "").trim() || "Walk-in guest";
-    const phone = String(req.body?.phone || "").trim() || (tableNumber ? `manual-table-${tableNumber}` : "manual-walk-in");
+    const customerName = String(req.body?.customerName || "").trim();
+    const phone = normalizePhone(String(req.body?.phone || "").trim());
     const notes = typeof req.body?.notes === "string" ? req.body.notes.trim() : "";
     const requestedOrderType = String(req.body?.orderType || "").trim().toLowerCase();
     const status = typeof req.body?.status === "string" ? req.body.status.trim().toLowerCase() : "pending";
 
     if (!cafeId) return res.status(400).json({ message: "cafeId is required" });
     if (!canAccessCafe(req.user, cafeId)) return forbiddenTenant(res);
+    if (!customerName) return res.status(400).json({ message: "customerName is required for manual orders" });
+    if (!phone) return res.status(400).json({ message: "phone is required for manual orders" });
     if (tableNumber !== null && (!tableNumber || tableNumber < 1)) {
       return res.status(400).json({ message: "tableNumber must be >= 1" });
     }

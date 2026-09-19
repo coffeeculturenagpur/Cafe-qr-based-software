@@ -1154,8 +1154,19 @@ export default function KitchenPage() {
   const buildOrderPayloadFromDraft = (draft) => {
     const rawTableNumber = String(draft.tableNumber || "").trim();
     const parsedTableNumber = rawTableNumber ? Number(rawTableNumber) : null;
+    const customerName = String(draft.customerName || "").trim();
+    const phone = String(draft.phone || "").trim();
     if (rawTableNumber && (!parsedTableNumber || parsedTableNumber < 1)) {
       return { error: "Table number must be 1 or more" };
+    }
+    if (!customerName) {
+      return { error: "Customer name is required for a manual order" };
+    }
+    if (!phone) {
+      return { error: "Phone number is required for a manual order" };
+    }
+    if (!phone.replace(/\D/g, "")) {
+      return { error: "Enter a valid phone number" };
     }
     if (!Array.isArray(draft.items) || draft.items.length === 0) {
       return { error: "Add at least one item to the order" };
@@ -1164,8 +1175,8 @@ export default function KitchenPage() {
     return {
       payload: {
         tableNumber: parsedTableNumber,
-        customerName: String(draft.customerName || "").trim() || "Walk-in guest",
-        phone: String(draft.phone || "").trim() || (parsedTableNumber ? `manual-table-${parsedTableNumber}` : "manual-walk-in"),
+        customerName,
+        phone,
         notes: String(draft.notes || "").trim(),
         paymentMode: draft.paymentMode,
         status: draft.status,
@@ -1670,13 +1681,41 @@ export default function KitchenPage() {
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,16rem)_1fr]">
-              <Input
-                value={quickOrderDraft.tableNumber}
-                onChange={(e) => setQuickOrderDraft((prev) => ({ ...prev, tableNumber: e.target.value }))}
-                placeholder="Table number"
-                type="number"
-                min="1"
-              />
+              <div className="space-y-3">
+                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Table number <span className="font-normal normal-case">(optional)</span>
+                  <Input
+                    className="mt-1.5"
+                    value={quickOrderDraft.tableNumber}
+                    onChange={(e) => setQuickOrderDraft((prev) => ({ ...prev, tableNumber: e.target.value }))}
+                    placeholder="Table number"
+                    type="number"
+                    min="1"
+                  />
+                </label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Customer name <span className="text-red-600">*</span>
+                  <Input
+                    className="mt-1.5"
+                    value={quickOrderDraft.customerName}
+                    onChange={(e) => setQuickOrderDraft((prev) => ({ ...prev, customerName: e.target.value }))}
+                    placeholder="Customer name"
+                    required
+                  />
+                </label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Phone number <span className="text-red-600">*</span>
+                  <Input
+                    className="mt-1.5"
+                    value={quickOrderDraft.phone}
+                    onChange={(e) => setQuickOrderDraft((prev) => ({ ...prev, phone: e.target.value }))}
+                    placeholder="Phone number"
+                    type="tel"
+                    inputMode="tel"
+                    required
+                  />
+                </label>
+              </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800/80 dark:bg-slate-950/50">
                 <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-slate-800">
                   <div className="text-sm font-semibold text-slate-900 dark:text-slate-200">Selected items</div>
@@ -2897,12 +2936,15 @@ export default function KitchenPage() {
                     onChange={(e) =>
                       updateDraftField("customerName", e.target.value)
                     }
-                    placeholder="Customer name"
+                    placeholder="Customer name *"
+                    required
                   />
                   <Input
                     value={orderDraft.phone}
                     onChange={(e) => updateDraftField("phone", e.target.value)}
-                    placeholder="Phone (optional)"
+                    placeholder="Phone number *"
+                    type="tel"
+                    required
                   />
                   <select
                     value={orderDraft.paymentMode}
