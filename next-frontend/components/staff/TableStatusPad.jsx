@@ -21,6 +21,9 @@ function buildTableStatusMap(groups) {
       tableKey: group.tableKey || String(tableNumber),
       orderCount: Array.isArray(group.orders) ? group.orders.length : 0,
       orders: Array.isArray(group.orders) ? group.orders : [],
+      manualOrderCount: Array.isArray(group.orders)
+        ? group.orders.filter((order) => order?.source === "manual").length
+        : 0,
     });
   }
 
@@ -129,6 +132,7 @@ export function TableStatusPad({
           const isDarkTextStatus = tableStatus === "accepted";
           const isBlinking = Boolean(blinkingTableNumbers?.[tableNumber]);
           const isSelected = Number(selectedTableNumber) === tableNumber;
+          const hasManualOrders = Number(entry?.manualOrderCount || 0) > 0;
 
           return (
             <button
@@ -165,6 +169,11 @@ export function TableStatusPad({
               aria-pressed={isExpanded}
             >
               <span className="text-3xl font-black leading-none sm:text-[2.1rem]">{tableNumber}</span>
+              {hasManualOrders && (
+                <span className="mt-1 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-amber-900">
+                  Manual
+                </span>
+              )}
               <span className="mt-1.5 text-[9px] font-bold uppercase tracking-[0.22em] opacity-85 sm:text-[10px]">
                 {tableStatus}
               </span>

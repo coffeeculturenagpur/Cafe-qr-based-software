@@ -669,11 +669,15 @@ export default function KitchenPage() {
     };
     const onNewOrder = (order) => {
       if (!isKitchenLiveOrder(order)) return;
+      const isManualOrder = order?.source === "manual";
       if (
+        !isManualOrder &&
         String(order?.status || "").toLowerCase() === "pending" &&
         order?._id
       ) {
         pendingAlertOrderIdsRef.current.add(String(order._id));
+      } else if (isManualOrder && order?._id) {
+        pendingAlertOrderIdsRef.current.delete(String(order._id));
       }
       syncPendingAlertLoop();
       const line =
@@ -682,7 +686,9 @@ export default function KitchenPage() {
         `New order · ${formatKitchenTableLabel(order.tableNumber)}${line ? ` · ${line.slice(0, 80)}` : ""}`,
       );
       setTimeout(() => setAlertMsg(""), 8000);
-      maybeNotifyBrowser("New kitchen order", formatKitchenTableLabel(order.tableNumber));
+      if (!isManualOrder) {
+        maybeNotifyBrowser("New kitchen order", formatKitchenTableLabel(order.tableNumber));
+      }
       merge(order);
     };
     socket.on("NEW_ORDER", onNewOrder);
@@ -1316,7 +1322,6 @@ export default function KitchenPage() {
       // Store the completed order so chef can print the bill
       setLastCreatedOrder(updated);
       clearQuickOrderDraft();
-      playSuccess();
     } catch (e) {
       setError(e.message || "Failed to create quick order");
     } finally {
@@ -2522,6 +2527,11 @@ export default function KitchenPage() {
                               <div className="text-[15px] font-black leading-tight text-slate-950">
                                 Order #{String(o._id).slice(-6)}
                               </div>
+                              {o.source === "manual" && (
+                                <div className="rounded-full border border-amber-200 bg-amber-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-amber-900">
+                                  Manual
+                                </div>
+                              )}
                               <div
                                 className={`rounded-full border px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${orderPalette.pillClassName || ""}`}
                                 style={orderPalette.pillStyle}
