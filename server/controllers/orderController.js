@@ -676,16 +676,14 @@ exports.createStaffOrder = async (req, res) => {
     const tableNumber = rawTableNumber === null || rawTableNumber === "" || typeof rawTableNumber === "undefined"
       ? null
       : Number(rawTableNumber);
-    const customerName = String(req.body?.customerName || "").trim();
-    const phone = normalizePhone(String(req.body?.phone || "").trim());
+    let customerName = String(req.body?.customerName || "").trim();
+    let phone = normalizePhone(String(req.body?.phone || "").trim());
     const notes = typeof req.body?.notes === "string" ? req.body.notes.trim() : "";
     const requestedOrderType = String(req.body?.orderType || "").trim().toLowerCase();
     const status = typeof req.body?.status === "string" ? req.body.status.trim().toLowerCase() : "pending";
 
     if (!cafeId) return res.status(400).json({ message: "cafeId is required" });
     if (!canAccessCafe(req.user, cafeId)) return forbiddenTenant(res);
-    if (!customerName) return res.status(400).json({ message: "customerName is required for manual orders" });
-    if (!phone) return res.status(400).json({ message: "phone is required for manual orders" });
     if (tableNumber !== null && (!tableNumber || tableNumber < 1)) {
       return res.status(400).json({ message: "tableNumber must be >= 1" });
     }
@@ -715,6 +713,14 @@ exports.createStaffOrder = async (req, res) => {
 
     const orderType =
       requestedOrderType === "cigarette" || allCigarette ? "cigarette" : "food";
+
+    if (orderType === "cigarette") {
+      customerName = "";
+      phone = "";
+    } else {
+      if (!customerName) return res.status(400).json({ message: "customerName is required for manual orders" });
+      if (!phone) return res.status(400).json({ message: "phone is required for manual orders" });
+    }
 
     if (orderType === "cigarette" && !allCigarette) {
       return res.status(400).json({ message: "Cigarette orders may only include cigarette menu items" });

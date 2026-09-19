@@ -19,8 +19,20 @@ const orderSchema = new mongoose.Schema(
     sessionId: { type: String, trim: true, default: "", index: true },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", default: null, index: true },
 
-    customerName: { type: String, required: true, trim: true },
-    phone: { type: String, required: true, trim: true },
+    customerName: {
+      type: String,
+      required: function requiredCustomerName() {
+        return this.orderType !== "cigarette";
+      },
+      trim: true,
+    },
+    phone: {
+      type: String,
+      required: function requiredCustomerPhone() {
+        return this.orderType !== "cigarette";
+      },
+      trim: true,
+    },
     notes: { type: String, trim: true, default: "" },
 
     items: { type: [orderItemSchema], default: [] },

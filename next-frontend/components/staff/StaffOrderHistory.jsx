@@ -164,6 +164,7 @@ export default function StaffOrderHistory({ title, backHref, roleGate, dashboard
       <div className="space-y-3">
         {orders.map((o) => {
           const cigarette = isCigaretteOrder(o);
+          const manual = String(o.source || "").toLowerCase() === "manual";
           const tableLabel =
             Number(o.tableNumber || 0) > 0 ? `Table ${o.tableNumber}` : "Walk-in";
           return (
@@ -183,15 +184,21 @@ export default function StaffOrderHistory({ title, backHref, roleGate, dashboard
                         Food
                       </span>
                     )}
+                    <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${manual ? "border-amber-200 bg-amber-50 text-amber-900" : "border-sky-200 bg-sky-50 text-sky-900"}`}>
+                      {manual ? "Manual order" : "QR scanned"}
+                    </span>
                     <div className="text-xs font-semibold uppercase text-orange-700">{o.status}</div>
                   </div>
                 </div>
                 <div className="mt-1 text-xs text-slate-500">
                   {o.createdAt ? new Date(o.createdAt).toLocaleString() : ""}
                 </div>
-                <div className="mt-2 text-sm text-slate-700">
-                  {o.customerName} · {o.phone}
+                {!cigarette && (
+                  <div className="mt-2 grid gap-1 text-sm text-slate-700 sm:grid-cols-2">
+                  <div><span className="font-semibold text-slate-500">Customer:</span> {o.customerName || "-"}</div>
+                  <div><span className="font-semibold text-slate-500">Phone:</span> {o.phone || "-"}</div>
                 </div>
+                )}
                 {Array.isArray(o.items) && o.items.length > 0 ? (
                   <div className="mt-2 text-xs text-slate-600">
                     {o.items

@@ -22,7 +22,6 @@ function upsertOrder(list, order) {
 function createEmptyDraft() {
   return {
     tableNumber: "",
-    customerName: "Walk-in guest",
     paymentMode: "cash",
     items: [],
   };
@@ -179,7 +178,6 @@ export function CigarettePanel({
         cafeId,
         orderType: "cigarette",
         tableNumber,
-        customerName: String(draft.customerName || "").trim() || "Walk-in guest",
         paymentMode: draft.paymentMode || "cash",
         status: "pending",
         items: draft.items.map((it) => ({
@@ -303,7 +301,7 @@ export function CigarettePanel({
           <div className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
             New cigarette order
           </div>
-          <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <div className="mb-4 grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-slate-700 dark:text-slate-200">
                 Table (optional)
@@ -312,13 +310,6 @@ export function CigarettePanel({
                 placeholder="Walk-in"
                 value={draft.tableNumber}
                 onChange={(e) => setDraft((prev) => ({ ...prev, tableNumber: e.target.value }))}
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700 dark:text-slate-200">Customer</span>
-              <Input
-                value={draft.customerName}
-                onChange={(e) => setDraft((prev) => ({ ...prev, customerName: e.target.value }))}
               />
             </label>
             <label className="block text-sm">
@@ -433,7 +424,7 @@ export function CigarettePanel({
                       {Number(order.tableNumber || 0) > 0 ? `Table ${order.tableNumber}` : "Walk-in"}
                     </div>
                     <div className="text-xs text-slate-500">
-                      {order.customerName || "Guest"} · {String(order.status || "").toUpperCase()} ·{" "}
+                      Counter sale · {String(order.status || "").toUpperCase()} ·{" "}
                       {String(order.paymentMode || "cash").toUpperCase()}
                     </div>
                   </div>
