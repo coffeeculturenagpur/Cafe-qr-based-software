@@ -805,8 +805,10 @@ export default function KitchenPage() {
     setQuickOrderDraft(createEmptyOrderDraft("pending"));
   };
 
-  const printReceipt = (order) => {
+  const printReceipt = (order, billType = "customer") => {
     if (!order) return;
+    const isChefBill = billType === "chef";
+    const printBodyClass = isChefBill ? "chef-only" : "customer-only";
     const cafeName = cafeInfo?.name || "Coffee Culture";
     const cafeLogo = cafeInfo?.logoUrl || "";
     const taxRate = Number(cafeInfo?.taxPercent || 0);
@@ -1044,10 +1046,23 @@ export default function KitchenPage() {
               text-transform: uppercase;
               letter-spacing: 1px;
             }
+
+            body.chef-only .customer-copy,
+            body.customer-only .kitchen-copy {
+              display: none;
+            }
+
+            body.chef-only .kitchen-copy {
+              page-break-before: auto;
+              margin-top: 0;
+              padding-top: 2mm;
+              border-top: 0;
+            }
           </style>
         </head>
-        <body>
+        <body class="${printBodyClass}">
           <!-- ═══════════ CUSTOMER COPY ═══════════ -->
+          <section class="customer-copy">
           ${cafeLogo ? `<img class="logo" src="${cafeLogo}" alt="Cafe logo" />` : ""}
           <div class="cafe-name">${cafeName}</div>
           <h1>Final Bill</h1>
@@ -1059,7 +1074,7 @@ export default function KitchenPage() {
             <div>Phone: ${formatKitchenPhone(order.phone)}</div>
             <div>Opened: ${createdAt}</div>
             <div>Last updated: ${updatedAt}</div>
-            <div>Bill type: Combined final bill</div>
+            <div>Bill type: Customer final bill</div>
           </div>
           <div class="divider"></div>
           <table>
@@ -1104,11 +1119,13 @@ export default function KitchenPage() {
             <div>Thank you for visiting!</div>
           </div>
 
+          </section>
+
           <!-- ═══════════ KITCHEN COPY ═══════════ -->
-          <div class="page-break">
+          <section class="kitchen-copy page-break">
             <div class="center">
               <div class="kitchen-header">Kitchen Order</div>
-              <span class="tag">Kitchen Copy</span>
+              <span class="tag">Chef Copy</span>
             </div>
             <div class="meta">
               <div>Order: #${orderIdShort}</div>
@@ -1129,7 +1146,7 @@ export default function KitchenPage() {
             </table>
             <div class="divider"></div>
             <div class="center" style="font-size:10px; margin-top: 6px;">— Prepare promptly —</div>
-          </div>
+          </section>
 
           <script>
             window.onload = function() {
@@ -1472,14 +1489,6 @@ export default function KitchenPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold inline-flex items-center gap-2 border-0"
-                onClick={() => printReceipt(lastCreatedOrder)}
-              >
-                <Printer className="h-4 w-4" />
-                Print Bill & KOT
-              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -2549,6 +2558,17 @@ export default function KitchenPage() {
                           ? "preparing"
                           : normalizedOrderStatus),
                     );
+                    const canPrintChefBill = [
+                      "accepted",
+                      "preparing",
+                      "baking",
+                      "ready",
+                      "served",
+                      "paid",
+                    ].includes(normalizedOrderStatus);
+                    const canPrintCustomerBill = ["served", "paid"].includes(
+                      normalizedOrderStatus,
+                    );
                     const itemCount = (
                       Array.isArray(o.items) ? o.items : []
                     ).reduce((sum, item) => sum + Number(item?.qty || 0), 0);
@@ -2866,15 +2886,30 @@ export default function KitchenPage() {
                               >
                                 Reject
                               </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className={kitchenActionButtonClass("print")}
-                                onClick={() => printReceipt(o)}
-                                disabled={loading}
-                              >
-                                Print bill
-                              </Button>
+                              {canPrintChefBill && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className={kitchenActionButtonClass("print")}
+                                  onClick={() => printReceipt(o, "chef")}
+                                  disabled={loading}
+                                >
+                                  <Printer className="mr-1.5 h-3.5 w-3.5" />
+                                  Print chef bill
+                                </Button>
+                              )}
+                              {canPrintCustomerBill && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className={kitchenActionButtonClass("print")}
+                                  onClick={() => printReceipt(o, "customer")}
+                                  disabled={loading}
+                                >
+                                  <Printer className="mr-1.5 h-3.5 w-3.5" />
+                                  Print customer bill
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </div>
