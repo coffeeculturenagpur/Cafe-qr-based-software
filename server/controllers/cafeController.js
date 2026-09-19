@@ -17,7 +17,11 @@ exports.getCafeById = async (req, res) => {
   try {
     const cafe = await Cafe.findById(req.params.id).lean();
     if (!cafe) return res.status(404).json({ message: "Cafe not found" });
-    return res.json(cafe);
+    const activeTableCount = await Table.countDocuments({
+      cafeId: cafe._id,
+      isActive: true,
+    });
+    return res.json({ ...cafe, numberOfTables: activeTableCount });
   } catch (error) {
     return res.status(500).json({ message: "Server error", error });
   }
