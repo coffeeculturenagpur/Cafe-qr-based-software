@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { getOrderStatusPalette } from "../../lib/orderStatusPalette";
 
-const DEFAULT_TABLE_COUNT = 18;
+const DEFAULT_TABLE_COUNT = 0;
 
 function toPositiveNumber(value) {
   const numeric = Number(value);

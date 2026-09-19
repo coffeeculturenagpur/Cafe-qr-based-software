@@ -616,7 +616,19 @@ export default function KitchenPage() {
     };
 
     window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
+    const refreshCafeTableCount = async () => {
+      try {
+        const freshCafe = await getCafeWithCache(cafeId, { force: true });
+        setCafeInfo((current) => ({ ...(current || {}), ...(freshCafe || {}) }));
+      } catch {
+        // Keep the last known table count if a background refresh fails.
+      }
+    };
+    const refreshTimer = window.setInterval(refreshCafeTableCount, 15000);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.clearInterval(refreshTimer);
+    };
   }, [cafeId, loadKitchenData]);
 
   useEffect(() => {
