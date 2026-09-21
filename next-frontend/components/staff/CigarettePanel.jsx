@@ -36,10 +36,12 @@ export function CigarettePanel({
   cafeInfo,
   canCreate = true,
   canMarkPaid = true,
+  id,
   className = "",
 }) {
   const [menuItems, setMenuItems] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [previousOrders, setPreviousOrders] = useState([]);
   const [draft, setDraft] = useState(createEmptyDraft);
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState("");
@@ -67,8 +69,8 @@ export function CigarettePanel({
     const cost = Number(item.costPrice || 0);
     const sale = Number(item.price || 0);
     result.qty += qty;
-    result.principal += qty * cost;
-    result.profit += qty * (sale - cost);
+    result.principal += Number(item.principalAmount ?? qty * cost);
+    result.profit += qty * Number(item.profitPerPiece ?? (sale - cost));
     return result;
   }, { qty: 0, principal: 0, profit: 0 }), [cigaretteItems]);
 
@@ -78,14 +80,20 @@ export function CigarettePanel({
     setError("");
     try {
       const qs = ordersTodayQueryString();
-      const [menu, list] = await Promise.all([
+      const [menu, list, history] = await Promise.all([
         apiFetch(`/api/menu/${cafeId}/staff`, { headers: { ...authHeaders() } }),
         apiFetch(`/api/orders/${cafeId}?${qs}&orderType=cigarette&scope=cigarette_live`, {
+          headers: { ...authHeaders() },
+        }),
+        apiFetch(`/api/orders/${cafeId}?${qs}&orderType=cigarette&scope=history`, {
           headers: { ...authHeaders() },
         }),
       ]);
       setMenuItems(Array.isArray(menu) ? menu : []);
       setOrders(filterCigaretteLiveOrders(Array.isArray(list) ? list : []));
+      setPreviousOrders(
+        (Array.isArray(history) ? history : []).filter((order) => ["paid", "rejected", "served"].includes(String(order.status || "").toLowerCase()))
+      );
     } catch (e) {
       setError(e.message || "Failed to load cigarettes");
     } finally {
@@ -170,12 +178,17 @@ export function CigarettePanel({
     }));
   };
 
+  const draftQtyFor = (menuItemId) => Number(
+    draft.items.find((line) => String(line.menuItemId) === String(menuItemId))?.qty || 0
+  );
+
   const saveStock = async (item) => {
     const values = stockDrafts[String(item._id)] || {};
     const stockQty = Number(values.stockQty ?? item.stockQty ?? 0);
-    const costPrice = Number(values.costPrice ?? item.costPrice ?? 0);
-    if (!Number.isInteger(stockQty) || stockQty < 0 || !Number.isFinite(costPrice) || costPrice < 0) {
-      setError("Enter a whole stock quantity and a valid principal price");
+    const principalAmount = Number(values.principalAmount ?? item.principalAmount ?? Number(item.stockQty || 0) * Number(item.costPrice || 0));
+    const profitPerPiece = Number(values.profitPerPiece ?? item.profitPerPiece ?? (Number(item.price || 0) - Number(item.costPrice || 0)));
+    if (!Number.isInteger(stockQty) || stockQty < 0 || !Number.isFinite(principalAmount) || principalAmount < 0 || !Number.isFinite(profitPerPiece)) {
+      setError("Enter stock pieces, principal amount, and profit per piece");
       return;
     }
     setSavingId(`stock-${item._id}`);
@@ -184,7 +197,7 @@ export function CigarettePanel({
       await apiFetch(`/api/menu/stock/${item._id}`, {
         method: "PATCH",
         headers: { ...authHeaders() },
-        body: JSON.stringify({ cafeId, stockQty, costPrice }),
+        body: JSON.stringify({ cafeId, stockQty, principalAmount, profitPerPiece }),
       });
       await load();
       setSuccess(`${item.name} stock saved`);
@@ -290,6 +303,9 @@ export function CigarettePanel({
         body: JSON.stringify({ status }),
       });
       if (status === "paid" || status === "rejected") {
+        setPreviousOrders((prev) => upsertOrder(prev, updated));
+      }
+      if (status === "paid" || status === "rejected") {
         setOrders((prev) => prev.filter((o) => o._id !== order._id));
       } else {
         setOrders((prev) => filterCigaretteLiveOrders(upsertOrder(prev, updated)));
@@ -302,7 +318,7 @@ export function CigarettePanel({
   };
 
   return (
-    <div className={`space-y-4 ${className}`}>
+    <div id={id} className={`space-y-4 ${className}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Cigarettes</h2>
@@ -385,12 +401,29 @@ export function CigarettePanel({
                       Sale INR {Number(item.price || 0).toFixed(2)} · Stock {Number(item.stockQty || 0)} pcs
                     </div>
                   </button>
+                  {draftQtyFor(item._id) > 0 ? (
+                    <div className="mt-2 flex items-center justify-between rounded-xl border border-amber-200 bg-white px-2 py-1">
+                      <button type="button" className="h-8 w-8 rounded-full border font-bold" onClick={() => setDraftQty(item._id, draftQtyFor(item._id) - 1)}>−</button>
+                      <span className="text-sm font-black">{draftQtyFor(item._id)} selected</span>
+                      <button type="button" className="h-8 w-8 rounded-full border font-bold" onClick={() => addItemToDraft(item)}>+</button>
+                    </div>
+                  ) : null}
                   <div className="mt-2 text-[11px] text-slate-500">
-                    Principal/pc: INR {Number(item.costPrice || 0).toFixed(2)} · Profit/pc: INR {(Number(item.price || 0) - Number(item.costPrice || 0)).toFixed(2)}
+                    Principal total: INR {Number(item.principalAmount ?? Number(item.stockQty || 0) * Number(item.costPrice || 0)).toFixed(2)} · Profit/pc: INR {Number(item.profitPerPiece ?? (Number(item.price || 0) - Number(item.costPrice || 0))).toFixed(2)}
                   </div>
-                  <div className="mt-2 grid grid-cols-2 gap-1">
-                    <Input type="number" min="0" step="1" placeholder="Stock pcs" value={stockDrafts[String(item._id)]?.stockQty ?? item.stockQty ?? 0} onChange={(e) => setStockDrafts((prev) => ({ ...prev, [String(item._id)]: { ...prev[String(item._id)], stockQty: e.target.value } }))} />
-                    <Input type="number" min="0" step="0.01" placeholder="Principal" value={stockDrafts[String(item._id)]?.costPrice ?? item.costPrice ?? 0} onChange={(e) => setStockDrafts((prev) => ({ ...prev, [String(item._id)]: { ...prev[String(item._id)], costPrice: e.target.value } }))} />
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Stock quantity (pcs)
+                      <Input aria-label="Stock quantity in pieces" className="mt-1" type="number" min="0" step="1" value={stockDrafts[String(item._id)]?.stockQty ?? item.stockQty ?? 0} onChange={(e) => setStockDrafts((prev) => ({ ...prev, [String(item._id)]: { ...prev[String(item._id)], stockQty: e.target.value } }))} />
+                    </label>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Principal amount (INR)
+                      <Input aria-label="Total principal amount" className="mt-1" type="number" min="0" step="0.01" value={stockDrafts[String(item._id)]?.principalAmount ?? item.principalAmount ?? Number(item.stockQty || 0) * Number(item.costPrice || 0)} onChange={(e) => setStockDrafts((prev) => ({ ...prev, [String(item._id)]: { ...prev[String(item._id)], principalAmount: e.target.value } }))} />
+                    </label>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Profit / piece (INR)
+                      <Input aria-label="Profit per piece" className="mt-1" type="number" step="0.01" value={stockDrafts[String(item._id)]?.profitPerPiece ?? item.profitPerPiece ?? (Number(item.price || 0) - Number(item.costPrice || 0))} onChange={(e) => setStockDrafts((prev) => ({ ...prev, [String(item._id)]: { ...prev[String(item._id)], profitPerPiece: e.target.value } }))} />
+                    </label>
                   </div>
                   <Button type="button" variant="outline" className="mt-2 w-full text-xs" disabled={savingId === `stock-${item._id}`} onClick={() => saveStock(item)}>
                     {savingId === `stock-${item._id}` ? "Saving..." : "Save stock"}
@@ -434,7 +467,7 @@ export function CigarettePanel({
               ))}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                 <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Draft total: INR {draftTotal.toFixed(2)}
+                  Total sum: INR {draftTotal.toFixed(2)}
                 </div>
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" onClick={() => setDraft(createEmptyDraft())}>
@@ -544,6 +577,28 @@ export function CigarettePanel({
               </div>
             );
           })
+        )}
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between text-sm font-semibold text-slate-800 dark:text-slate-100">
+          <span>Previous cigarette orders</span>
+          <span className="rounded-full border border-slate-200 px-3 py-1 text-xs">{previousOrders.length}</span>
+        </div>
+        {previousOrders.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">No previous cigarette orders.</div>
+        ) : (
+          previousOrders.map((order) => (
+            <div key={`history-${order._id}`} className="rounded-2xl border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-bold">#{String(order._id).slice(-6).toUpperCase()} · {Number(order.tableNumber || 0) > 0 ? `Table ${order.tableNumber}` : "Walk-in"}</span>
+                <span className="text-xs font-bold uppercase text-amber-700">{order.status}</span>
+              </div>
+              <div className="mt-1 text-xs text-slate-500">{order.createdAt ? new Date(order.createdAt).toLocaleString() : ""}</div>
+              <div className="mt-2 break-words text-xs text-slate-600">{(order.items || []).map((line) => `${line.name} ×${line.qty}`).join(" · ")}</div>
+              <div className="mt-2 flex justify-between font-bold"><span>Total</span><span>INR {Number(order.totalAmount || 0).toFixed(2)}</span></div>
+            </div>
+          ))
         )}
       </div>
     </div>

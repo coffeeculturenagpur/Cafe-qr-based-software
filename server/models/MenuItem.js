@@ -23,6 +23,8 @@ const menuItemSchema = new mongoose.Schema({
     },
     stockQty: { type: Number, default: 0, min: 0 },
     costPrice: { type: Number, default: 0, min: 0 },
+    principalAmount: { type: Number, default: 0, min: 0 },
+    profitPerPiece: { type: Number, default: 0 },
     category: {
         type: String,
         required: true,

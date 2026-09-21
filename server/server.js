@@ -86,6 +86,14 @@ app.use('/api/admin/media', adminMediaRoutes);
 app.use('/api/admin/cafe', adminCafeRoutes);
 app.use('/api/qr', qrRoutes);
 
+// Keep API failures JSON-shaped so the frontend never receives Express's HTML 404 page.
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ message: `API route not found: ${req.method} ${req.path}` });
+  }
+  return next();
+});
+
 // Global error handling middleware
 app.use((err, req, res, next) => {
   console.error("Unhandled server error:", err);

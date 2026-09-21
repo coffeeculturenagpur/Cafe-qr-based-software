@@ -78,7 +78,7 @@ async function resolveOrderItems(cafeId, items, { allowUnavailable = false } = {
   }
 
   const menuDocs = await MenuItem.find(menuQuery)
-    .select("_id name price isAvailable category costPrice stockQty")
+    .select("_id name price isAvailable category costPrice stockQty principalAmount profitPerPiece")
     .lean();
 
   const menuMap = new Map(menuDocs.map((doc) => [String(doc._id), doc]));
@@ -105,7 +105,7 @@ async function resolveOrderItems(cafeId, items, { allowUnavailable = false } = {
       menuItemId: menuDoc._id,
       name: menuDoc.name,
       price: unitPrice,
-      costPrice: Number(menuDoc.costPrice || 0),
+      costPrice: Number(menuDoc.costPrice || (Number(menuDoc.stockQty) ? Number(menuDoc.principalAmount || 0) / Number(menuDoc.stockQty) : 0)),
       qty: line.qty,
     });
   }
@@ -129,7 +129,18 @@ async function adjustCigaretteStock(cafeId, changes) {
       if (!delta) continue;
       const query = { _id: id, cafeId };
       if (delta > 0) query.stockQty = { $gte: delta };
-      const item = await MenuItem.findOneAndUpdate(query, { $inc: { stockQty: -delta } }, { new: true }).lean();
+      const current = await MenuItem.findOne(query).select("costPrice principalAmount stockQty").lean();
+      if (!current) {
+        const error = new Error("Insufficient cigarette stock");
+        error.status = 400;
+        throw error;
+      }
+      const unitCost = Number(current.costPrice || (current.stockQty ? Number(current.principalAmount || 0) / current.stockQty : 0));
+      const item = await MenuItem.findOneAndUpdate(
+        query,
+        { $inc: { stockQty: -delta, principalAmount: -delta * unitCost } },
+        { new: true }
+      ).lean();
       if (!item) {
         const error = new Error("Insufficient cigarette stock");
         error.status = 400;

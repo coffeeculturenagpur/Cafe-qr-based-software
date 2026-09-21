@@ -1568,6 +1568,17 @@ export default function KitchenPage() {
           >
             Manual order
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-amber-300 text-amber-800 hover:bg-amber-50"
+            onClick={() => {
+              setKitchenTab("cigarettes");
+              window.setTimeout(() => document.getElementById("cigarette-counter")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+            }}
+          >
+            Manual cigarette order
+          </Button>
         </div>
         <div>
           <h2 className="font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
@@ -1648,7 +1659,7 @@ export default function KitchenPage() {
         </div>
 
         {kitchenTab === "cigarettes" ? (
-          <CigarettePanel cafeId={cafeId} token={token} cafeInfo={cafeInfo} canCreate canMarkPaid />
+          <CigarettePanel id="cigarette-counter" cafeId={cafeId} token={token} cafeInfo={cafeInfo} canCreate canMarkPaid />
         ) : kitchenTab === "notes" ? (
           <div className="grid items-start gap-5 xl:grid-cols-[minmax(20rem,0.8fr)_minmax(0,1.5fr)]">
             <form onSubmit={addCustomerNote} className="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">

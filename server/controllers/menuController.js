@@ -134,15 +134,19 @@ exports.updateCigaretteStock = async (req, res) => {
     if (!cafeId) return res.status(400).json({ message: "Invalid cafeId" });
     if (!canAccessCafe(req.user, String(cafeId))) return forbiddenTenant(res);
     const stockQty = Number(req.body?.stockQty);
-    const costPrice = Number(req.body?.costPrice);
+    const principalAmount = Number(req.body?.principalAmount ?? req.body?.costPrice ?? 0);
+    const profitPerPiece = Number(req.body?.profitPerPiece ?? 0);
     if (!Number.isInteger(stockQty) || stockQty < 0) return res.status(400).json({ message: "stockQty must be a whole number >= 0" });
-    if (!Number.isFinite(costPrice) || costPrice < 0) return res.status(400).json({ message: "costPrice must be >= 0" });
+    if (!Number.isFinite(principalAmount) || principalAmount < 0) return res.status(400).json({ message: "principalAmount must be >= 0" });
+    if (!Number.isFinite(profitPerPiece)) return res.status(400).json({ message: "profitPerPiece must be a number" });
     const categories = await getCigaretteCategorySetForCafe(cafeId);
     const item = await MenuItem.findOne({ _id: req.params.id, cafeId });
     if (!item) return res.status(404).json({ message: "Item not found" });
     if (!isCigaretteCategory(item.category, categories)) return res.status(400).json({ message: "Stock can only be maintained for cigarette items" });
     item.stockQty = stockQty;
-    item.costPrice = Number(costPrice.toFixed(2));
+    item.principalAmount = Number(principalAmount.toFixed(2));
+    item.costPrice = stockQty > 0 ? Number((principalAmount / stockQty).toFixed(2)) : 0;
+    item.profitPerPiece = Number(profitPerPiece.toFixed(2));
     await item.save();
     return res.json(item);
   } catch (error) {
