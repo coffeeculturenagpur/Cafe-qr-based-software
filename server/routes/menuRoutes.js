@@ -12,6 +12,12 @@ router.get(
   requireRole(['kitchen', 'staff', 'cafe_admin', 'super_admin']),
   menuController.getStaffMenuByCafe
 );
+router.patch(
+  '/stock/:id',
+  requireAuth,
+  requireRole(['kitchen', 'staff', 'cafe_admin', 'super_admin']),
+  menuController.updateCigaretteStock
+);
 router.get('/:cafeId', menuController.getMenuByCafe);
 
 //admin routes

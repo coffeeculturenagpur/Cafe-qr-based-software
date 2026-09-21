@@ -78,7 +78,7 @@ async function resolveOrderItems(cafeId, items, { allowUnavailable = false } = {
   }
 
   const menuDocs = await MenuItem.find(menuQuery)
-    .select("_id name price isAvailable category")
+    .select("_id name price isAvailable category costPrice stockQty")
     .lean();
 
   const menuMap = new Map(menuDocs.map((doc) => [String(doc._id), doc]));
@@ -105,11 +105,47 @@ async function resolveOrderItems(cafeId, items, { allowUnavailable = false } = {
       menuItemId: menuDoc._id,
       name: menuDoc.name,
       price: unitPrice,
+      costPrice: Number(menuDoc.costPrice || 0),
       qty: line.qty,
     });
   }
 
   return { resolvedItems, lineSubtotal, menuMap };
+}
+
+function cigaretteQuantities(items) {
+  const result = new Map();
+  for (const item of Array.isArray(items) ? items : []) {
+    const id = item?.menuItemId ? String(item.menuItemId) : "";
+    if (id) result.set(id, (result.get(id) || 0) + Number(item.qty || 0));
+  }
+  return result;
+}
+
+async function adjustCigaretteStock(cafeId, changes) {
+  const changed = [];
+  try {
+    for (const [id, delta] of changes) {
+      if (!delta) continue;
+      const query = { _id: id, cafeId };
+      if (delta > 0) query.stockQty = { $gte: delta };
+      const item = await MenuItem.findOneAndUpdate(query, { $inc: { stockQty: -delta } }, { new: true }).lean();
+      if (!item) {
+        const error = new Error("Insufficient cigarette stock");
+        error.status = 400;
+        throw error;
+      }
+      changed.push([id, delta]);
+    }
+    return changed;
+  } catch (error) {
+    for (const [id, delta] of changed) await MenuItem.updateOne({ _id: id, cafeId }, { $inc: { stockQty: delta } });
+    throw error;
+  }
+}
+
+async function restoreCigaretteStock(cafeId, changes) {
+  for (const [id, delta] of changes) await MenuItem.updateOne({ _id: id, cafeId }, { $inc: { stockQty: delta } });
 }
 
 async function buildResolvedOrderPayload(cafeId, items, { allowUnavailable = false } = {}) {
@@ -736,7 +772,12 @@ exports.createStaffOrder = async (req, res) => {
       return res.status(403).json({ message: "Waiters may only create cigarette orders" });
     }
 
-    const order = await Order.create({
+    const stockChanges = orderType === "cigarette"
+      ? await adjustCigaretteStock(cafeId, Array.from(cigaretteQuantities(resolvedItems), ([id, qty]) => [id, qty]))
+      : [];
+    let order;
+    try {
+      order = await Order.create({
       cafeId,
       tableNumber,
       visitId: "",
@@ -762,7 +803,11 @@ exports.createStaffOrder = async (req, res) => {
             acceptToServeMs: 0,
           }
         : {}),
-    });
+      });
+    } catch (error) {
+      if (stockChanges.length) await restoreCigaretteStock(cafeId, stockChanges);
+      throw error;
+    }
 
     // Cigarette counter sales should not fight dining table reserved/free state.
     if (orderType !== "cigarette" && tableNumber) {
@@ -884,12 +929,33 @@ exports.updateOrder = async (req, res) => {
       update.totalAmount = totalAmount;
     }
 
+    let stockChanges = [];
+    if (prevOrderType === "cigarette") {
+      const before = cigaretteQuantities(prev.items);
+      const after = cigaretteQuantities(update.items || prev.items);
+      const wasActive = !["paid", "rejected"].includes(String(prev.status || "").toLowerCase());
+      const willBeActive = !["paid", "rejected"].includes(String(update.status || prev.status || "").toLowerCase());
+      const ids = new Set([...before.keys(), ...after.keys()]);
+      const changes = Array.from(ids).map((id) => [
+        id,
+        (willBeActive ? after.get(id) || 0 : 0) - (wasActive ? before.get(id) || 0 : 0),
+      ]).filter(([, delta]) => delta);
+      if (changes.length) stockChanges = await adjustCigaretteStock(String(prev.cafeId), changes);
+    }
+
     applyOrderStatusTiming(update, prev);
 
-    const order = await Order.findByIdAndUpdate(req.params.id, update, {
-      new: true,
-    });
-    if (!order) return res.status(404).json({ message: "Order not found" });
+    let order;
+    try {
+      order = await Order.findByIdAndUpdate(req.params.id, update, { new: true });
+    } catch (error) {
+      if (stockChanges.length) await restoreCigaretteStock(String(prev.cafeId), stockChanges.map(([id, delta]) => [id, -delta]));
+      throw error;
+    }
+    if (!order) {
+      if (stockChanges.length) await restoreCigaretteStock(String(prev.cafeId), stockChanges.map(([id, delta]) => [id, -delta]));
+      return res.status(404).json({ message: "Order not found" });
+    }
 
     emitCafeEvent(order.cafeId, "ORDER_UPDATED", order);
 

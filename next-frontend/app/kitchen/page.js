@@ -74,7 +74,7 @@ function formatMenuItemMeta(item) {
 }
 
 function sanitizePhoneInput(value) {
-  return String(value || "").replace(/\D/g, "").slice(0, 15);
+  return String(value || "").replace(/\D/g, "").slice(0, 10);
 }
 
 function kitchenActionButtonClass(kind) {
@@ -1285,8 +1285,8 @@ export default function KitchenPage() {
     if (!phone) {
       return { error: "Phone number is required for a manual order" };
     }
-    if (!/^\d{7,15}$/.test(phone)) {
-      return { error: "Enter a valid phone number with 7 to 15 digits" };
+    if (!/^\d{10}$/.test(phone)) {
+      return { error: "Enter a valid 10-digit phone number" };
     }
     if (!Array.isArray(draft.items) || draft.items.length === 0) {
       return { error: "Add at least one item to the order" };
@@ -1668,7 +1668,7 @@ export default function KitchenPage() {
                 </label>
                 <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Phone number <span className="font-normal normal-case">(optional)</span>
-                  <Input className="mt-1.5" value={noteDraft.phone} onChange={(e) => setNoteDraft((previous) => ({ ...previous, phone: sanitizePhoneInput(e.target.value) }))} placeholder="Phone number" type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} />
+                  <Input className="mt-1.5" value={noteDraft.phone} onChange={(e) => setNoteDraft((previous) => ({ ...previous, phone: sanitizePhoneInput(e.target.value) }))} placeholder="Phone number" type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={10} />
                 </label>
                 <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Amount due <span className="font-normal normal-case">(optional)</span>
@@ -1963,13 +1963,13 @@ export default function KitchenPage() {
                   <Input
                     className="mt-1.5"
                     value={quickOrderDraft.phone}
-                    onChange={(e) => setQuickOrderDraft((prev) => ({ ...prev, phone: e.target.value }))}
+                    onChange={(e) => setQuickOrderDraft((prev) => ({ ...prev, phone: sanitizePhoneInput(e.target.value) }))}
                     placeholder="Phone number"
                     type="tel"
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    minLength={7}
-                    maxLength={15}
+                    minLength={10}
+                    maxLength={10}
                     required
                   />
                 </label>
@@ -3252,13 +3252,13 @@ export default function KitchenPage() {
                   />
                   <Input
                     value={orderDraft.phone}
-                    onChange={(e) => updateDraftField("phone", e.target.value)}
+                    onChange={(e) => updateDraftField("phone", sanitizePhoneInput(e.target.value))}
                     placeholder="Phone number *"
                     type="tel"
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    minLength={7}
-                    maxLength={15}
+                    minLength={10}
+                    maxLength={10}
                     required
                   />
                   <select

@@ -127,6 +127,29 @@ exports.getStaffMenuByCafe = async (req, res) => {
   }
 };
 
+exports.updateCigaretteStock = async (req, res) => {
+  try {
+    const rawCafeId = getCafeIdForWrite(req);
+    const cafeId = toValidObjectId(rawCafeId);
+    if (!cafeId) return res.status(400).json({ message: "Invalid cafeId" });
+    if (!canAccessCafe(req.user, String(cafeId))) return forbiddenTenant(res);
+    const stockQty = Number(req.body?.stockQty);
+    const costPrice = Number(req.body?.costPrice);
+    if (!Number.isInteger(stockQty) || stockQty < 0) return res.status(400).json({ message: "stockQty must be a whole number >= 0" });
+    if (!Number.isFinite(costPrice) || costPrice < 0) return res.status(400).json({ message: "costPrice must be >= 0" });
+    const categories = await getCigaretteCategorySetForCafe(cafeId);
+    const item = await MenuItem.findOne({ _id: req.params.id, cafeId });
+    if (!item) return res.status(404).json({ message: "Item not found" });
+    if (!isCigaretteCategory(item.category, categories)) return res.status(400).json({ message: "Stock can only be maintained for cigarette items" });
+    item.stockQty = stockQty;
+    item.costPrice = Number(costPrice.toFixed(2));
+    await item.save();
+    return res.json(item);
+  } catch (error) {
+    return res.status(500).json({ message: error.message || "Server error" });
+  }
+};
+
 // Add a new item
 exports.adddMenuItem = async (req, res) => {
   try {

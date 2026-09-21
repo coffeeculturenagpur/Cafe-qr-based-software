@@ -46,6 +46,7 @@ export function CigarettePanel({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [socketState, setSocketState] = useState("disconnected");
+  const [stockDrafts, setStockDrafts] = useState({});
 
   const cigaretteItems = useMemo(
     () => filterCigaretteMenuItems(menuItems, cafeInfo),
@@ -60,6 +61,16 @@ export function CigarettePanel({
       0
     );
   }, [draft.items]);
+
+  const stockSummary = useMemo(() => cigaretteItems.reduce((result, item) => {
+    const qty = Number(item.stockQty || 0);
+    const cost = Number(item.costPrice || 0);
+    const sale = Number(item.price || 0);
+    result.qty += qty;
+    result.principal += qty * cost;
+    result.profit += qty * (sale - cost);
+    return result;
+  }, { qty: 0, principal: 0, profit: 0 }), [cigaretteItems]);
 
   const load = useCallback(async () => {
     if (!cafeId || !token) return;
@@ -157,6 +168,31 @@ export function CigarettePanel({
               String(it.menuItemId) === String(menuItemId) ? { ...it, qty } : it
             ),
     }));
+  };
+
+  const saveStock = async (item) => {
+    const values = stockDrafts[String(item._id)] || {};
+    const stockQty = Number(values.stockQty ?? item.stockQty ?? 0);
+    const costPrice = Number(values.costPrice ?? item.costPrice ?? 0);
+    if (!Number.isInteger(stockQty) || stockQty < 0 || !Number.isFinite(costPrice) || costPrice < 0) {
+      setError("Enter a whole stock quantity and a valid principal price");
+      return;
+    }
+    setSavingId(`stock-${item._id}`);
+    setError("");
+    try {
+      await apiFetch(`/api/menu/stock/${item._id}`, {
+        method: "PATCH",
+        headers: { ...authHeaders() },
+        body: JSON.stringify({ cafeId, stockQty, costPrice }),
+      });
+      await load();
+      setSuccess(`${item.name} stock saved`);
+    } catch (e) {
+      setError(e.message || "Failed to save stock");
+    } finally {
+      setSavingId("");
+    }
   };
 
   const createOrder = async () => {
@@ -301,6 +337,11 @@ export function CigarettePanel({
           <div className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
             New cigarette order
           </div>
+          <div className="mb-4 grid gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950 sm:grid-cols-3">
+            <div><b>Stock:</b> {stockSummary.qty} pcs</div>
+            <div><b>Principal:</b> INR {stockSummary.principal.toFixed(2)}</div>
+            <div><b>Expected profit:</b> INR {stockSummary.profit.toFixed(2)}</div>
+          </div>
           <div className="mb-4 grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-slate-700 dark:text-slate-200">
@@ -334,19 +375,27 @@ export function CigarettePanel({
           ) : (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
               {cigaretteItems.map((item) => (
-                <button
+                <div
                   key={item._id}
-                  type="button"
-                  onClick={() => addItemToDraft(item)}
-                  className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-amber-50/40 px-3 py-3 text-left transition hover:border-amber-300 hover:bg-amber-50 dark:border-slate-800 dark:from-slate-900 dark:to-slate-950"
+                  className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-amber-50/40 px-3 py-3 dark:border-slate-800 dark:from-slate-900 dark:to-slate-950"
                 >
-                  <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {item.name}
+                  <button type="button" onClick={() => addItemToDraft(item)} className="w-full text-left">
+                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.name}</div>
+                    <div className="mt-1 text-xs font-bold text-amber-800 dark:text-amber-300">
+                      Sale INR {Number(item.price || 0).toFixed(2)} · Stock {Number(item.stockQty || 0)} pcs
+                    </div>
+                  </button>
+                  <div className="mt-2 text-[11px] text-slate-500">
+                    Principal/pc: INR {Number(item.costPrice || 0).toFixed(2)} · Profit/pc: INR {(Number(item.price || 0) - Number(item.costPrice || 0)).toFixed(2)}
                   </div>
-                  <div className="mt-1 text-xs font-bold text-amber-800 dark:text-amber-300">
-                    INR {Number(item.price || 0).toFixed(0)}
+                  <div className="mt-2 grid grid-cols-2 gap-1">
+                    <Input type="number" min="0" step="1" placeholder="Stock pcs" value={stockDrafts[String(item._id)]?.stockQty ?? item.stockQty ?? 0} onChange={(e) => setStockDrafts((prev) => ({ ...prev, [String(item._id)]: { ...prev[String(item._id)], stockQty: e.target.value } }))} />
+                    <Input type="number" min="0" step="0.01" placeholder="Principal" value={stockDrafts[String(item._id)]?.costPrice ?? item.costPrice ?? 0} onChange={(e) => setStockDrafts((prev) => ({ ...prev, [String(item._id)]: { ...prev[String(item._id)], costPrice: e.target.value } }))} />
                   </div>
-                </button>
+                  <Button type="button" variant="outline" className="mt-2 w-full text-xs" disabled={savingId === `stock-${item._id}`} onClick={() => saveStock(item)}>
+                    {savingId === `stock-${item._id}` ? "Saving..." : "Save stock"}
+                  </Button>
+                </div>
               ))}
             </div>
           )}

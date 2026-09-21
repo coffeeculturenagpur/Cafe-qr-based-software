@@ -7,6 +7,7 @@ export default function KitchenHistoryPage() {
       backHref="/kitchen"
       roleGate="kitchen"
       dashboardLabel="Chef dashboard"
+      showPaymentNotes
     />
   );
 }
