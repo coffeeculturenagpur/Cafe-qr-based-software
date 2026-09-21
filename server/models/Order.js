@@ -6,6 +6,8 @@ const orderItemSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     price: { type: Number, required: true, min: 0 },
     costPrice: { type: Number, default: 0, min: 0 },
+    principalPerPiece: { type: Number, default: 0, min: 0 },
+    profitPerPiece: { type: Number, default: 0 },
     qty: { type: Number, required: true, min: 1 },
   },
   { _id: false }
@@ -46,6 +48,9 @@ const orderSchema = new mongoose.Schema(
     discountAmount: { type: Number, default: 0, min: 0 },
     /** Final amount payable (after discount + tax) */
     totalAmount: { type: Number, required: true, min: 0 },
+    /** Cigarette accounting snapshot, populated when a counter order is created. */
+    principalAmount: { type: Number, default: 0, min: 0 },
+    profitAmount: { type: Number, default: 0 },
 
     /** Customer-selected payment mode */
     paymentMode: {

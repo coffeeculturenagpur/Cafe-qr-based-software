@@ -32,12 +32,17 @@ export function isCigaretteMenuItem(item, cafeInfoOrSet) {
   const set =
     cafeInfoOrSet instanceof Set ? cafeInfoOrSet : buildCigaretteCategorySet(cafeInfoOrSet);
   const normalized = normalizeCigaretteCategory(item?.category);
-  if (!normalized) return false;
-  if (set.has(normalized)) return true;
-  return normalized.includes("cigaret");
+  return Boolean(normalized && set.has(normalized));
 }
 
 export function filterCigaretteMenuItems(menuItems, cafeInfo) {
   const set = buildCigaretteCategorySet(cafeInfo);
   return (Array.isArray(menuItems) ? menuItems : []).filter((item) => isCigaretteMenuItem(item, set));
+}
+
+export function getCigaretteSalePrice(item) {
+  const name = normalizeCigaretteCategory(item?.name);
+  if (name === "advance") return 30;
+  if (name === "american") return 25;
+  return Number(item?.price || 0);
 }

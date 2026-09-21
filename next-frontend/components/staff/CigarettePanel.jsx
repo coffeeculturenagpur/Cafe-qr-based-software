@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../../lib/api";
 import { authHeaders } from "../../lib/auth";
-import { filterCigaretteMenuItems } from "../../lib/cigaretteMenu";
+import { filterCigaretteMenuItems, getCigaretteSalePrice } from "../../lib/cigaretteMenu";
 import { filterCigaretteLiveOrders, isCigaretteOrder } from "../../lib/staffOrderFilters";
 import { ordersTodayQueryString } from "../../lib/staffOrderRange";
-import { getOrderDisplayTotal, printCigaretteBill } from "../../lib/receiptHtml";
+import { printCigaretteBill } from "../../lib/receiptHtml";
 import { connectCafeSocket } from "../../lib/socket";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
@@ -48,7 +48,7 @@ export function CigarettePanel({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [socketState, setSocketState] = useState("disconnected");
-  const [stockDrafts, setStockDrafts] = useState({});
+  const [pricingDrafts, setPricingDrafts] = useState({});
 
   const cigaretteItems = useMemo(
     () => filterCigaretteMenuItems(menuItems, cafeInfo),
@@ -63,16 +63,6 @@ export function CigarettePanel({
       0
     );
   }, [draft.items]);
-
-  const stockSummary = useMemo(() => cigaretteItems.reduce((result, item) => {
-    const qty = Number(item.stockQty || 0);
-    const cost = Number(item.costPrice || 0);
-    const sale = Number(item.price || 0);
-    result.qty += qty;
-    result.principal += Number(item.principalAmount ?? qty * cost);
-    result.profit += qty * Number(item.profitPerPiece ?? (sale - cost));
-    return result;
-  }, { qty: 0, principal: 0, profit: 0 }), [cigaretteItems]);
 
   const load = useCallback(async () => {
     if (!cafeId || !token) return;
@@ -155,7 +145,7 @@ export function CigarettePanel({
           {
             menuItemId: id,
             name: menuItem.name,
-            price: Number(menuItem.price || 0),
+            price: getCigaretteSalePrice(menuItem),
             qty: 1,
           },
         ],
@@ -182,25 +172,29 @@ export function CigarettePanel({
     draft.items.find((line) => String(line.menuItemId) === String(menuItemId))?.qty || 0
   );
 
-  const saveStock = async (item) => {
-    const values = stockDrafts[String(item._id)] || {};
-    const stockQty = Number(values.stockQty ?? item.stockQty ?? 0);
-    const principalAmount = Number(values.principalAmount ?? item.principalAmount ?? Number(item.stockQty || 0) * Number(item.costPrice || 0));
-    const profitPerPiece = Number(values.profitPerPiece ?? item.profitPerPiece ?? (Number(item.price || 0) - Number(item.costPrice || 0)));
-    if (!Number.isInteger(stockQty) || stockQty < 0 || !Number.isFinite(principalAmount) || principalAmount < 0 || !Number.isFinite(profitPerPiece)) {
-      setError("Enter stock pieces, principal amount, and profit per piece");
+  const principalBalanceFor = (item) => Number(item.principalAmount || 0);
+  const profitBalanceFor = (item) => Number(item.profitAmount ?? 0);
+  const remainingBalanceFor = (item) => Number(item.remainingAmount ?? (principalBalanceFor(item) + profitBalanceFor(item)));
+  const cigaretteOrderTotal = (order) => (order?.items || []).reduce((sum, item) => sum + getCigaretteSalePrice(item) * Number(item.qty || 0), 0);
+
+  const savePricing = async (item) => {
+    const values = pricingDrafts[String(item._id)] || {};
+    const principalAmount = Number(values.principalAmount ?? principalBalanceFor(item));
+    const profitAmount = Number(values.profitAmount ?? profitBalanceFor(item));
+    if (!Number.isFinite(principalAmount) || principalAmount < 0 || !Number.isFinite(profitAmount) || profitAmount < 0) {
+      setError("Enter a valid principal and profit balance");
       return;
     }
-    setSavingId(`stock-${item._id}`);
+    setSavingId(`pricing-${item._id}`);
     setError("");
     try {
       await apiFetch(`/api/menu/stock/${item._id}`, {
         method: "PATCH",
         headers: { ...authHeaders() },
-        body: JSON.stringify({ cafeId, stockQty, principalAmount, profitPerPiece }),
+        body: JSON.stringify({ cafeId, principalAmount, profitAmount }),
       });
       await load();
-      setSuccess(`${item.name} stock saved`);
+      setSuccess(`${item.name} pricing saved`);
     } catch (e) {
       setError(e.message || "Failed to save stock");
     } finally {
@@ -331,6 +325,9 @@ export function CigarettePanel({
           <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
             {liveOrders.length} open
           </span>
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
+            INR {cigaretteItems.reduce((sum, item) => sum + remainingBalanceFor(item), 0).toFixed(2)} balance
+          </span>
           <Button type="button" variant="outline" onClick={load} disabled={loading || !cafeId}>
             Refresh
           </Button>
@@ -351,13 +348,9 @@ export function CigarettePanel({
       {canCreate ? (
         <div className="rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/60">
           <div className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
-            New cigarette order
+            Manual cigarette order
           </div>
-          <div className="mb-4 grid gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950 sm:grid-cols-3">
-            <div><b>Stock:</b> {stockSummary.qty} pcs</div>
-            <div><b>Principal:</b> INR {stockSummary.principal.toFixed(2)}</div>
-            <div><b>Expected profit:</b> INR {stockSummary.profit.toFixed(2)}</div>
-          </div>
+          <p className="mb-4 text-sm text-slate-500">Choose cigarettes and adjust quantity for a walk-in customer.</p>
           <div className="mb-4 grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-slate-700 dark:text-slate-200">
@@ -389,16 +382,17 @@ export function CigarettePanel({
               <strong>Cigarettes</strong> (same spelling as on the menu card), then click Refresh.
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-              {cigaretteItems.map((item) => (
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.72fr)]">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                {cigaretteItems.map((item) => (
                 <div
                   key={item._id}
                   className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-amber-50/40 px-3 py-3 dark:border-slate-800 dark:from-slate-900 dark:to-slate-950"
                 >
                   <button type="button" onClick={() => addItemToDraft(item)} className="w-full text-left">
                     <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.name}</div>
-                    <div className="mt-1 text-xs font-bold text-amber-800 dark:text-amber-300">
-                      Sale INR {Number(item.price || 0).toFixed(2)} · Stock {Number(item.stockQty || 0)} pcs
+                    <div className="mt-2 inline-flex max-w-full rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold leading-tight text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                      INR {principalBalanceFor(item).toFixed(2)} principal + INR {profitBalanceFor(item).toFixed(2)} profit = INR {remainingBalanceFor(item).toFixed(2)} remaining
                     </div>
                   </button>
                   {draftQtyFor(item._id) > 0 ? (
@@ -408,28 +402,52 @@ export function CigarettePanel({
                       <button type="button" className="h-8 w-8 rounded-full border font-bold" onClick={() => addItemToDraft(item)}>+</button>
                     </div>
                   ) : null}
-                  <div className="mt-2 text-[11px] text-slate-500">
-                    Principal total: INR {Number(item.principalAmount ?? Number(item.stockQty || 0) * Number(item.costPrice || 0)).toFixed(2)} · Profit/pc: INR {Number(item.profitPerPiece ?? (Number(item.price || 0) - Number(item.costPrice || 0))).toFixed(2)}
-                  </div>
-                  <div className="mt-2 grid grid-cols-3 gap-2">
+                  <div className="mt-3 grid grid-cols-2 gap-2">
                     <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Stock quantity (pcs)
-                      <Input aria-label="Stock quantity in pieces" className="mt-1" type="number" min="0" step="1" value={stockDrafts[String(item._id)]?.stockQty ?? item.stockQty ?? 0} onChange={(e) => setStockDrafts((prev) => ({ ...prev, [String(item._id)]: { ...prev[String(item._id)], stockQty: e.target.value } }))} />
+                      Principal balance
+                      <Input aria-label="Principal balance" className="mt-1" type="number" min="0" step="0.01" value={pricingDrafts[String(item._id)]?.principalAmount ?? principalBalanceFor(item)} onChange={(e) => setPricingDrafts((prev) => ({ ...prev, [String(item._id)]: { ...prev[String(item._id)], principalAmount: e.target.value } }))} />
                     </label>
                     <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Principal amount (INR)
-                      <Input aria-label="Total principal amount" className="mt-1" type="number" min="0" step="0.01" value={stockDrafts[String(item._id)]?.principalAmount ?? item.principalAmount ?? Number(item.stockQty || 0) * Number(item.costPrice || 0)} onChange={(e) => setStockDrafts((prev) => ({ ...prev, [String(item._id)]: { ...prev[String(item._id)], principalAmount: e.target.value } }))} />
-                    </label>
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Profit / piece (INR)
-                      <Input aria-label="Profit per piece" className="mt-1" type="number" step="0.01" value={stockDrafts[String(item._id)]?.profitPerPiece ?? item.profitPerPiece ?? (Number(item.price || 0) - Number(item.costPrice || 0))} onChange={(e) => setStockDrafts((prev) => ({ ...prev, [String(item._id)]: { ...prev[String(item._id)], profitPerPiece: e.target.value } }))} />
+                      Profit balance
+                      <Input aria-label="Profit balance" className="mt-1" type="number" min="0" step="0.01" value={pricingDrafts[String(item._id)]?.profitAmount ?? profitBalanceFor(item)} onChange={(e) => setPricingDrafts((prev) => ({ ...prev, [String(item._id)]: { ...prev[String(item._id)], profitAmount: e.target.value } }))} />
                     </label>
                   </div>
-                  <Button type="button" variant="outline" className="mt-2 w-full text-xs" disabled={savingId === `stock-${item._id}`} onClick={() => saveStock(item)}>
-                    {savingId === `stock-${item._id}` ? "Saving..." : "Save stock"}
+                  <Button type="button" variant="outline" className="mt-2 w-full text-xs" disabled={savingId === `pricing-${item._id}`} onClick={() => savePricing(item)}>
+                    {savingId === `pricing-${item._id}` ? "Saving..." : "Save pricing"}
                   </Button>
                 </div>
-              ))}
+                ))}
+              </div>
+              <div className="rounded-3xl border border-emerald-200 bg-emerald-50/50 p-3 dark:border-emerald-900 dark:bg-emerald-950/20">
+                <div className="mb-3">
+                  <div className="text-sm font-bold text-emerald-950 dark:text-emerald-100">Create customer order</div>
+                  <div className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">Add cigarettes using the cards below.</div>
+                </div>
+                <div className="space-y-2">
+                  {cigaretteItems.map((item) => {
+                    const quantity = draftQtyFor(item._id);
+                    return (
+                      <div key={`order-card-${item._id}`} className="rounded-2xl border border-emerald-200 bg-white p-3 shadow-sm dark:border-emerald-900 dark:bg-slate-950">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-bold text-slate-900 dark:text-slate-100">{item.name}</div>
+                            <div className="mt-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">INR {getCigaretteSalePrice(item).toFixed(2)} each</div>
+                          </div>
+                          {quantity === 0 ? (
+                            <Button type="button" className="px-3 py-1.5 text-xs" onClick={() => addItemToDraft(item)}>Add</Button>
+                          ) : (
+                            <div className="flex items-center overflow-hidden rounded-xl border border-emerald-300 bg-white dark:bg-slate-900">
+                              <button type="button" className="h-8 w-8 text-lg font-bold" onClick={() => setDraftQty(item._id, quantity - 1)}>−</button>
+                              <span className="min-w-[2rem] text-center text-sm font-black">{quantity}</span>
+                              <button type="button" className="h-8 w-8 text-lg font-bold" onClick={() => addItemToDraft(item)}>+</button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
 
@@ -492,7 +510,7 @@ export function CigarettePanel({
         ) : (
           liveOrders.map((order) => {
             const orderIdShort = String(order._id).slice(-6).toUpperCase();
-            const total = getOrderDisplayTotal(order, cafeInfo);
+            const total = cigaretteOrderTotal(order);
             const busy = savingId === order._id;
             return (
               <div
@@ -524,7 +542,7 @@ export function CigarettePanel({
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold">{line.name}</div>
                         <div className="text-xs text-slate-500">
-                          INR {(Number(line.price || 0) * Number(line.qty || 0)).toFixed(2)}
+                          INR {(getCigaretteSalePrice(line) * Number(line.qty || 0)).toFixed(2)}
                         </div>
                       </div>
                       <div className="flex items-center overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
@@ -596,7 +614,7 @@ export function CigarettePanel({
               </div>
               <div className="mt-1 text-xs text-slate-500">{order.createdAt ? new Date(order.createdAt).toLocaleString() : ""}</div>
               <div className="mt-2 break-words text-xs text-slate-600">{(order.items || []).map((line) => `${line.name} ×${line.qty}`).join(" · ")}</div>
-              <div className="mt-2 flex justify-between font-bold"><span>Total</span><span>INR {Number(order.totalAmount || 0).toFixed(2)}</span></div>
+                <div className="mt-2 flex justify-between font-bold"><span>Total</span><span>INR {cigaretteOrderTotal(order).toFixed(2)}</span></div>
             </div>
           ))
         )}

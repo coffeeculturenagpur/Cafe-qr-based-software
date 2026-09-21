@@ -42,6 +42,13 @@ function normalizePaymentMode(value, fallback = "cash") {
   return paymentValue;
 }
 
+function getCigaretteSalePrice(menuItem) {
+  const name = String(menuItem?.name || "").trim().toLowerCase();
+  if (name === "advance") return 30;
+  if (name === "american") return 25;
+  return Number(menuItem?.price || 0);
+}
+
 async function resolveOrderItems(cafeId, items, { allowUnavailable = false } = {}) {
   if (!Array.isArray(items) || items.length === 0) {
     const error = new Error("items[] is required");
@@ -78,7 +85,7 @@ async function resolveOrderItems(cafeId, items, { allowUnavailable = false } = {
   }
 
   const menuDocs = await MenuItem.find(menuQuery)
-    .select("_id name price isAvailable category costPrice stockQty principalAmount profitPerPiece")
+    .select("_id name price isAvailable category costPrice stockQty principalAmount profitAmount remainingAmount profitPerPiece")
     .lean();
 
   const menuMap = new Map(menuDocs.map((doc) => [String(doc._id), doc]));
@@ -99,64 +106,20 @@ async function resolveOrderItems(cafeId, items, { allowUnavailable = false } = {
       throw error;
     }
 
-    const unitPrice = Number(menuDoc.price);
+    const unitPrice = getCigaretteSalePrice(menuDoc);
     lineSubtotal += unitPrice * line.qty;
     resolvedItems.push({
       menuItemId: menuDoc._id,
       name: menuDoc.name,
       price: unitPrice,
       costPrice: Number(menuDoc.costPrice || (Number(menuDoc.stockQty) ? Number(menuDoc.principalAmount || 0) / Number(menuDoc.stockQty) : 0)),
+      principalPerPiece: Number(menuDoc.costPrice || (Number(menuDoc.stockQty) ? Number(menuDoc.principalAmount || 0) / Number(menuDoc.stockQty) : menuDoc.principalAmount || 0)),
+      profitPerPiece: Number(menuDoc.profitPerPiece ?? (unitPrice - Number(menuDoc.costPrice || 0))),
       qty: line.qty,
     });
   }
 
   return { resolvedItems, lineSubtotal, menuMap };
-}
-
-function cigaretteQuantities(items) {
-  const result = new Map();
-  for (const item of Array.isArray(items) ? items : []) {
-    const id = item?.menuItemId ? String(item.menuItemId) : "";
-    if (id) result.set(id, (result.get(id) || 0) + Number(item.qty || 0));
-  }
-  return result;
-}
-
-async function adjustCigaretteStock(cafeId, changes) {
-  const changed = [];
-  try {
-    for (const [id, delta] of changes) {
-      if (!delta) continue;
-      const query = { _id: id, cafeId };
-      if (delta > 0) query.stockQty = { $gte: delta };
-      const current = await MenuItem.findOne(query).select("costPrice principalAmount stockQty").lean();
-      if (!current) {
-        const error = new Error("Insufficient cigarette stock");
-        error.status = 400;
-        throw error;
-      }
-      const unitCost = Number(current.costPrice || (current.stockQty ? Number(current.principalAmount || 0) / current.stockQty : 0));
-      const item = await MenuItem.findOneAndUpdate(
-        query,
-        { $inc: { stockQty: -delta, principalAmount: -delta * unitCost } },
-        { new: true }
-      ).lean();
-      if (!item) {
-        const error = new Error("Insufficient cigarette stock");
-        error.status = 400;
-        throw error;
-      }
-      changed.push([id, delta]);
-    }
-    return changed;
-  } catch (error) {
-    for (const [id, delta] of changed) await MenuItem.updateOne({ _id: id, cafeId }, { $inc: { stockQty: delta } });
-    throw error;
-  }
-}
-
-async function restoreCigaretteStock(cafeId, changes) {
-  for (const [id, delta] of changes) await MenuItem.updateOne({ _id: id, cafeId }, { $inc: { stockQty: delta } });
 }
 
 async function buildResolvedOrderPayload(cafeId, items, { allowUnavailable = false } = {}) {
@@ -171,6 +134,8 @@ async function buildResolvedOrderPayload(cafeId, items, { allowUnavailable = fal
     allowUnavailable,
   });
   const { subtotalAmount, discountAmount, taxAmount, totalAmount } = computeOrderTotals(cafe, lineSubtotal);
+  const principalAmount = resolvedItems.reduce((sum, item) => sum + Number(item.principalPerPiece || 0) * Number(item.qty || 0), 0);
+  const profitAmount = resolvedItems.reduce((sum, item) => sum + Number(item.profitPerPiece || 0) * Number(item.qty || 0), 0);
 
   return {
     cafe,
@@ -181,6 +146,8 @@ async function buildResolvedOrderPayload(cafeId, items, { allowUnavailable = fal
     discountAmount,
     taxAmount,
     totalAmount,
+    principalAmount: Number(principalAmount.toFixed(2)),
+    profitAmount: Number(profitAmount.toFixed(2)),
   };
 }
 
@@ -230,6 +197,36 @@ function sumOrderLineSubtotal(items) {
     (sum, item) => sum + Number(item?.price || 0) * Number(item?.qty || 0),
     0
   );
+}
+
+async function decrementCigaretteBalances(cafeId, items) {
+  for (const line of Array.isArray(items) ? items : []) {
+    const quantity = Number(line?.qty || 0);
+    const amount = Number(line?.price || 0) * quantity;
+    if (!line?.menuItemId || quantity < 1 || amount <= 0) continue;
+
+    const menuItem = await MenuItem.findOne({ _id: line.menuItemId, cafeId })
+      .select("principalAmount profitAmount remainingAmount")
+      .lean();
+    if (!menuItem) continue;
+
+    const currentBalance = Number(menuItem.remainingAmount ?? (Number(menuItem.principalAmount || 0) + Number(menuItem.profitAmount || 0)));
+    await MenuItem.updateOne(
+      { _id: line.menuItemId, cafeId },
+      { $set: { remainingAmount: Number((currentBalance - amount).toFixed(2)) } }
+    );
+  }
+}
+
+function cigaretteAccounting(items) {
+  return (Array.isArray(items) ? items : []).reduce((result, item) => {
+    const qty = Number(item?.qty || 0);
+    const principal = Number(item?.principalPerPiece ?? item?.costPrice ?? 0);
+    const profit = Number(item?.profitPerPiece ?? (Number(item?.price || 0) - principal));
+    result.principal += principal * qty;
+    result.profit += profit * qty;
+    return result;
+  }, { principal: 0, profit: 0 });
 }
 
 function mergeOrderNotes(existingNotes, nextNotes) {
@@ -578,7 +575,16 @@ exports.listOrdersByCafe = async (req, res) => {
     }
 
     const orders = await Order.find(q).sort({ createdAt: -1 }).lean();
-    return res.json(orders);
+    const normalizedOrders = orders.map((order) => {
+      if (String(order?.orderType || "").toLowerCase() !== "cigarette") return order;
+      const items = (order.items || []).map((item) => ({
+        ...item,
+        price: getCigaretteSalePrice(item),
+      }));
+      const totalAmount = items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.qty || 0), 0);
+      return { ...order, items, subtotalAmount: totalAmount, totalAmount };
+    });
+    return res.json(normalizedOrders);
   } catch (error) {
     return res.status(500).json({ message: "Server error", error });
   }
@@ -744,7 +750,7 @@ exports.createStaffOrder = async (req, res) => {
       return res.status(400).json({ message: "Invalid status for manual order" });
     }
 
-    const { cafe, resolvedItems, menuMap, cigaretteCategorySet, subtotalAmount, discountAmount, taxAmount, totalAmount } =
+    const { cafe, resolvedItems, menuMap, cigaretteCategorySet, subtotalAmount, discountAmount, taxAmount, totalAmount, principalAmount, profitAmount } =
       await buildResolvedOrderPayload(cafeId, req.body?.items, { allowUnavailable: true });
 
     if (cafe.isActive === false) {
@@ -783,9 +789,8 @@ exports.createStaffOrder = async (req, res) => {
       return res.status(403).json({ message: "Waiters may only create cigarette orders" });
     }
 
-    const stockChanges = orderType === "cigarette"
-      ? await adjustCigaretteStock(cafeId, Array.from(cigaretteQuantities(resolvedItems), ([id, qty]) => [id, qty]))
-      : [];
+    // Cigarette pricing is principal + profit per piece. Counter orders do not
+    // require an inventory quantity to be entered before they can be created.
     let order;
     try {
       order = await Order.create({
@@ -800,6 +805,8 @@ exports.createStaffOrder = async (req, res) => {
       discountAmount,
       taxAmount,
       totalAmount,
+      principalAmount,
+      profitAmount,
       paymentMode: normalizePaymentMode(req.body?.paymentMode, "cash"),
       source: "manual",
       orderType,
@@ -816,7 +823,6 @@ exports.createStaffOrder = async (req, res) => {
         : {}),
       });
     } catch (error) {
-      if (stockChanges.length) await restoreCigaretteStock(cafeId, stockChanges);
       throw error;
     }
 
@@ -928,7 +934,7 @@ exports.updateOrder = async (req, res) => {
       if (["paid", "rejected"].includes(String(prev.status || "").toLowerCase())) {
         return res.status(400).json({ message: "Paid or rejected orders cannot be edited" });
       }
-      const { resolvedItems, menuMap, cigaretteCategorySet, subtotalAmount, discountAmount, taxAmount, totalAmount } =
+      const { resolvedItems, menuMap, cigaretteCategorySet, subtotalAmount, discountAmount, taxAmount, totalAmount, principalAmount, profitAmount } =
         await buildResolvedOrderPayload(String(prev.cafeId), update.items, {
           allowUnavailable: prevOrderType === "cigarette",
         });
@@ -938,20 +944,30 @@ exports.updateOrder = async (req, res) => {
       update.discountAmount = discountAmount;
       update.taxAmount = taxAmount;
       update.totalAmount = totalAmount;
+      update.principalAmount = principalAmount;
+      update.profitAmount = profitAmount;
     }
 
-    let stockChanges = [];
-    if (prevOrderType === "cigarette") {
-      const before = cigaretteQuantities(prev.items);
-      const after = cigaretteQuantities(update.items || prev.items);
-      const wasActive = !["paid", "rejected"].includes(String(prev.status || "").toLowerCase());
-      const willBeActive = !["paid", "rejected"].includes(String(update.status || prev.status || "").toLowerCase());
-      const ids = new Set([...before.keys(), ...after.keys()]);
-      const changes = Array.from(ids).map((id) => [
-        id,
-        (willBeActive ? after.get(id) || 0 : 0) - (wasActive ? before.get(id) || 0 : 0),
-      ]).filter(([, delta]) => delta);
-      if (changes.length) stockChanges = await adjustCigaretteStock(String(prev.cafeId), changes);
+    if (prevOrderType === "cigarette" && String(update.status || "").toLowerCase() === "paid") {
+      const normalizedPaidOrder = await buildResolvedOrderPayload(
+        String(prev.cafeId),
+        (update.items || prev.items || []).map((item) => ({ menuItemId: item.menuItemId, qty: item.qty }))
+        , { allowUnavailable: true }
+      );
+      update.items = normalizedPaidOrder.resolvedItems;
+      update.subtotalAmount = normalizedPaidOrder.subtotalAmount;
+      update.discountAmount = normalizedPaidOrder.discountAmount;
+      update.taxAmount = normalizedPaidOrder.taxAmount;
+      update.totalAmount = normalizedPaidOrder.totalAmount;
+      const accounting = cigaretteAccounting(update.items || prev.items);
+      update.principalAmount = Number(accounting.principal.toFixed(2));
+      update.profitAmount = Number(accounting.profit.toFixed(2));
+    }
+
+    const previousStatus = String(prev.status || "").toLowerCase();
+    const nextStatus = String(update.status || prev.status || "").toLowerCase();
+    if (prevOrderType === "cigarette" && previousStatus !== "paid" && nextStatus === "paid") {
+      await decrementCigaretteBalances(String(prev.cafeId), update.items || prev.items);
     }
 
     applyOrderStatusTiming(update, prev);
@@ -960,11 +976,9 @@ exports.updateOrder = async (req, res) => {
     try {
       order = await Order.findByIdAndUpdate(req.params.id, update, { new: true });
     } catch (error) {
-      if (stockChanges.length) await restoreCigaretteStock(String(prev.cafeId), stockChanges.map(([id, delta]) => [id, -delta]));
       throw error;
     }
     if (!order) {
-      if (stockChanges.length) await restoreCigaretteStock(String(prev.cafeId), stockChanges.map(([id, delta]) => [id, -delta]));
       return res.status(404).json({ message: "Order not found" });
     }
 

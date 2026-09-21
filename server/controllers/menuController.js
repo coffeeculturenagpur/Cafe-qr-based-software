@@ -133,19 +133,37 @@ exports.updateCigaretteStock = async (req, res) => {
     const cafeId = toValidObjectId(rawCafeId);
     if (!cafeId) return res.status(400).json({ message: "Invalid cafeId" });
     if (!canAccessCafe(req.user, String(cafeId))) return forbiddenTenant(res);
+    const hasBalancePricing = Object.prototype.hasOwnProperty.call(req.body || {}, "principalAmount") && Object.prototype.hasOwnProperty.call(req.body || {}, "profitAmount");
+    const hasPerPiecePricing = Object.prototype.hasOwnProperty.call(req.body || {}, "principalPerPiece");
     const stockQty = Number(req.body?.stockQty);
+    const principalPerPiece = Number(req.body?.principalPerPiece);
     const principalAmount = Number(req.body?.principalAmount ?? req.body?.costPrice ?? 0);
+    const profitAmount = Number(req.body?.profitAmount ?? 0);
     const profitPerPiece = Number(req.body?.profitPerPiece ?? 0);
-    if (!Number.isInteger(stockQty) || stockQty < 0) return res.status(400).json({ message: "stockQty must be a whole number >= 0" });
-    if (!Number.isFinite(principalAmount) || principalAmount < 0) return res.status(400).json({ message: "principalAmount must be >= 0" });
+    if (hasBalancePricing && (!Number.isFinite(principalAmount) || principalAmount < 0 || !Number.isFinite(profitAmount) || profitAmount < 0)) return res.status(400).json({ message: "Principal and profit must be >= 0" });
+    if (hasPerPiecePricing && (!Number.isFinite(principalPerPiece) || principalPerPiece < 0)) return res.status(400).json({ message: "principalPerPiece must be >= 0" });
+    if (!hasBalancePricing && !hasPerPiecePricing && (!Number.isInteger(stockQty) || stockQty < 0)) return res.status(400).json({ message: "stockQty must be a whole number >= 0" });
+    if (!hasBalancePricing && !hasPerPiecePricing && (!Number.isFinite(principalAmount) || principalAmount < 0)) return res.status(400).json({ message: "principalAmount must be >= 0" });
     if (!Number.isFinite(profitPerPiece)) return res.status(400).json({ message: "profitPerPiece must be a number" });
     const categories = await getCigaretteCategorySetForCafe(cafeId);
     const item = await MenuItem.findOne({ _id: req.params.id, cafeId });
     if (!item) return res.status(404).json({ message: "Item not found" });
-    if (!isCigaretteCategory(item.category, categories)) return res.status(400).json({ message: "Stock can only be maintained for cigarette items" });
-    item.stockQty = stockQty;
-    item.principalAmount = Number(principalAmount.toFixed(2));
-    item.costPrice = stockQty > 0 ? Number((principalAmount / stockQty).toFixed(2)) : 0;
+    if (!isCigaretteCategory(item.category, categories)) return res.status(400).json({ message: "Pricing can only be maintained for cigarette items" });
+    if (hasBalancePricing) {
+      item.principalAmount = Number(principalAmount.toFixed(2));
+      item.profitAmount = Number(profitAmount.toFixed(2));
+      item.remainingAmount = Number((principalAmount + profitAmount).toFixed(2));
+      item.profitPerPiece = 0;
+    } else if (hasPerPiecePricing) {
+      item.principalAmount = Number(principalPerPiece.toFixed(2));
+      item.costPrice = Number(principalPerPiece.toFixed(2));
+      item.profitAmount = Number(profitPerPiece.toFixed(2));
+      item.remainingAmount = Number((principalPerPiece + profitPerPiece).toFixed(2));
+    } else {
+      item.stockQty = stockQty;
+      item.principalAmount = Number(principalAmount.toFixed(2));
+      item.costPrice = stockQty > 0 ? Number((principalAmount / stockQty).toFixed(2)) : 0;
+    }
     item.profitPerPiece = Number(profitPerPiece.toFixed(2));
     await item.save();
     return res.json(item);

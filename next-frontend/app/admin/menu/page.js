@@ -33,7 +33,7 @@ import { AppLoading } from "../../../components/AppLoading";
 import { primeCafeCache } from "../../../lib/cafeClient";
 import { invalidateMenuCache, primeMenuCache } from "../../../lib/menuClient";
 import { CigarettePanel } from "../../../components/staff/CigarettePanel";
-import { resolveCigaretteCategories } from "../../../lib/cigaretteMenu";
+import { filterCigaretteMenuItems, resolveCigaretteCategories } from "../../../lib/cigaretteMenu";
 
 function upsertById(list, item) {
   const idx = list.findIndex((x) => x._id === item._id);
@@ -366,6 +366,10 @@ export default function AdminMenuPage() {
       : [];
     return ids.map((id) => items.find((item) => String(item?._id || "") === id)).filter(Boolean);
   }, [cafeForm.quickOrderCigarette30Ids, items]);
+  const cigaretteBalanceTotal = useMemo(
+    () => filterCigaretteMenuItems(items, cafeForm).reduce((sum, item) => sum + Number(item?.remainingAmount ?? (Number(item?.principalAmount || 0) + Number(item?.profitAmount || 0))), 0),
+    [items, cafeForm]
+  );
   const [collapsedSections, setCollapsedSections] = useState({
     pickCafe: true,
     overview: true,
@@ -465,6 +469,7 @@ export default function AdminMenuPage() {
         to: new Date().toISOString(),
       });
 
+      qs.set("scope", "history");
       const orders = await apiFetch(`/api/orders/${encodeURIComponent(cafeIdForAdmin)}?${qs.toString()}`, {
         headers: { ...authHeaders() },
       });
@@ -473,6 +478,7 @@ export default function AdminMenuPage() {
       const statusMap = new Map();
       const topItemsMap = new Map();
       let paidRevenueTotal = 0;
+      let paidCigaretteProfitTotal = 0;
 
       for (const order of Array.isArray(orders) ? orders : []) {
         const createdAt = order?.createdAt ? new Date(order.createdAt) : null;
@@ -494,6 +500,13 @@ export default function AdminMenuPage() {
 
         if (status.toLowerCase() === "paid") {
           paidRevenueTotal += revenue;
+          if (String(order?.orderType || "").toLowerCase() === "cigarette") {
+            const legacyProfit = (Array.isArray(order?.items) ? order.items : []).reduce(
+              (sum, item) => sum + (Number(item?.price || 0) - Number(item?.costPrice || 0)) * Number(item?.qty || 0),
+              0
+            );
+            paidCigaretteProfitTotal += Number(order?.profitAmount ?? legacyProfit);
+          }
         }
 
         if (!isRejected) {
@@ -534,6 +547,7 @@ export default function AdminMenuPage() {
         byDay,
         statusBreakdown,
         paidRevenueTotal,
+        paidCigaretteProfitTotal,
         topItems,
         starItem: topItems[0] || null,
         rangeDays: days,
@@ -1826,6 +1840,10 @@ export default function AdminMenuPage() {
               <div className="text-xl font-bold text-slate-900">{formatCurrency(analytics?.paidRevenueTotal)}</div>
               <div className="text-xs uppercase tracking-wide text-slate-500">Paid Revenue</div>
             </div>
+            <div className="rounded-2xl border border-emerald-100 bg-white/80 px-4 py-3 text-center shadow-sm">
+              <div className="text-xl font-bold text-emerald-700">{formatCurrency(cigaretteBalanceTotal)}</div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">Cigarette Balance</div>
+            </div>
             <div className="rounded-2xl border border-orange-100 bg-white/80 px-4 py-3 text-center shadow-sm">
               <div className="text-xl font-bold text-slate-900">{analyticsTotals.totalOrders}</div>
               <div className="text-xs uppercase tracking-wide text-slate-500">Orders</div>
@@ -1898,11 +1916,17 @@ export default function AdminMenuPage() {
                     </div>
                   ) : (
                     <div className="mt-6 space-y-6">
-                      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
                         <div className="rounded-2xl border border-orange-100 bg-white/90 p-4">
                           <div className="text-xs uppercase tracking-wide text-slate-500">Paid revenue</div>
                           <div className="mt-2 text-2xl font-extrabold text-slate-900">
                             {formatCurrency(analytics?.paidRevenueTotal)}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
+                          <div className="text-xs uppercase tracking-wide text-emerald-700">Cigarette balance</div>
+                          <div className="mt-2 text-2xl font-extrabold text-emerald-700">
+                            {formatCurrency(cigaretteBalanceTotal)}
                           </div>
                         </div>
                         <div className="rounded-2xl border border-orange-100 bg-white/90 p-4">

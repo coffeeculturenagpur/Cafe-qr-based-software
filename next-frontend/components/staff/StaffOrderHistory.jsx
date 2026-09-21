@@ -11,6 +11,14 @@ import { Input } from "../ui/Input";
 import { StaffShell } from "../StaffShell";
 import { AppLoading } from "../AppLoading";
 import { formatDatetimeLocal, startOfLocalDay } from "../../lib/datetimeLocal";
+import { getCigaretteSalePrice } from "../../lib/cigaretteMenu";
+
+function cigaretteHistoryTotal(order) {
+  return (order?.items || []).reduce(
+    (sum, item) => sum + getCigaretteSalePrice(item) * Number(item?.qty || 0),
+    0
+  );
+}
 
 function HistoryOrderCard({ order }) {
   const cigarette = isCigaretteOrder(order);
@@ -61,7 +69,7 @@ function HistoryOrderCard({ order }) {
         ) : null}
         <div className="mt-2 flex justify-between gap-2 text-sm font-semibold text-slate-900">
           <span>Total</span>
-          <span className="shrink-0">INR {Number(order.totalAmount || 0).toFixed(2)}</span>
+          <span className="shrink-0">INR {(cigarette ? cigaretteHistoryTotal(order) : Number(order.totalAmount || 0)).toFixed(2)}</span>
         </div>
       </CardContent>
     </Card>
@@ -354,7 +362,7 @@ export default function StaffOrderHistory({ title, backHref, roleGate, dashboard
                 ) : null}
                 <div className="mt-2 flex justify-between text-sm font-semibold text-slate-900">
                   <span>Total</span>
-                  <span>INR {Number(o.totalAmount || 0).toFixed(2)}</span>
+                  <span>INR {(cigarette ? cigaretteHistoryTotal(o) : Number(o.totalAmount || 0)).toFixed(2)}</span>
                 </div>
               </CardContent>
             </Card>
