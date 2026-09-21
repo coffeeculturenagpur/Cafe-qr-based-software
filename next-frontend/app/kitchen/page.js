@@ -38,7 +38,7 @@ import {
 } from "../../lib/orderTiming";
 import { TableStatusPad } from "../../components/staff/TableStatusPad";
 import { CigarettePanel } from "../../components/staff/CigarettePanel";
-import { ChevronDown, ClipboardList, QrCode, X, Check, Printer } from "lucide-react";
+import { ChevronDown, ClipboardList, QrCode, X, Check, Printer, StickyNote, Trash2, CheckCircle2 } from "lucide-react";
 import {
   buildQuickOrderCategoryLookup,
   canonicalizeQuickOrderCategory,
@@ -71,6 +71,10 @@ function formatMenuItemMeta(item) {
   const category = String(item?.category || "").trim();
   const price = Number(item?.price || 0).toFixed(0);
   return category ? `${category} - Rs ${price}` : `Rs ${price}`;
+}
+
+function sanitizePhoneInput(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 15);
 }
 
 function kitchenActionButtonClass(kind) {
@@ -188,6 +192,7 @@ export default function KitchenPage() {
   const [todayOrders, setTodayOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [quickOrderError, setQuickOrderError] = useState("");
   const [socketState, setSocketState] = useState("disconnected");
   const [cafeInfo, setCafeInfo] = useState(null);
   const [alertMsg, setAlertMsg] = useState("");
@@ -207,6 +212,10 @@ export default function KitchenPage() {
   const [editingOrderId, setEditingOrderId] = useState("");
   const [orderDraft, setOrderDraft] = useState(() => createEmptyOrderDraft());
   const [quickOrderDraft, setQuickOrderDraft] = useState(() => createEmptyOrderDraft());
+  const [quickOrderItemSearch, setQuickOrderItemSearch] = useState("");
+  const [customerNotes, setCustomerNotes] = useState([]);
+  const [noteDraft, setNoteDraft] = useState({ customerName: "", phone: "", amountDue: "", note: "" });
+  const [notesHydrated, setNotesHydrated] = useState(false);
   const [editorSaving, setEditorSaving] = useState(false);
   const [expandedTables, setExpandedTables] = useState({});
   const [selectedTableKey, setSelectedTableKey] = useState("");
@@ -396,6 +405,40 @@ export default function KitchenPage() {
     return entries;
   }, [allCategoryItemsMap]);
 
+  const quickOrderGridItems = useMemo(() => {
+    const popularity = new Map(
+      popularMenuItems.map((entry, index) => [
+        String(entry?.menuItemId || ""),
+        Number(entry?.totalQty || entry?.quantity || 0) * 1000 - index,
+      ]),
+    );
+    const categoryItems = quickOrderCategory === "All"
+      ? menuItems.map((item) => ({ ...item, menuItemId: String(item?._id || "") }))
+      : allCategoryItemsMap.get(quickOrderCategory) || [];
+    const query = quickOrderItemSearch.trim().toLowerCase();
+
+    const rankedItems = categoryItems
+      .filter((item) => {
+        if (!query) return true;
+        return [item?.name, item?.category, item?.description]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query));
+      })
+      .slice()
+      .sort((left, right) => {
+        if (quickOrderCategory === "All") {
+          const scoreDiff = (popularity.get(String(right?._id || right?.menuItemId || "")) || 0) -
+            (popularity.get(String(left?._id || left?.menuItemId || "")) || 0);
+          if (scoreDiff) return scoreDiff;
+        }
+        return String(left?.name || "").localeCompare(String(right?.name || ""));
+      });
+
+    // The default view shows the complete menu, with most-ordered items first.
+    // Searching or choosing a category narrows the same full item set.
+    return rankedItems;
+  }, [allCategoryItemsMap, menuItems, popularMenuItems, quickOrderCategory, quickOrderItemSearch]);
+
   const selectedCategoryModalItems = useMemo(() => {
     if (!quickOrderCategoryModal) return [];
     return allCategoryItemsMap.get(quickOrderCategoryModal) || [];
@@ -436,10 +479,27 @@ export default function KitchenPage() {
   }, [quickOrderCategory, quickOrderCategoryTabs, quickOrderItemsByCategory]);
 
   useEffect(() => {
-    if (!quickOrderCategoryTabs.includes(quickOrderCategory)) {
+    if (quickOrderCategory !== "All" && !allCategoryItemsMap.has(quickOrderCategory)) {
       setQuickOrderCategory("All");
     }
-  }, [quickOrderCategory, quickOrderCategoryTabs]);
+  }, [allCategoryItemsMap, quickOrderCategory]);
+
+  useEffect(() => {
+    if (!mounted || !cafeId) return;
+    try {
+      const saved = window.localStorage.getItem(`chef-customer-notes:${cafeId}`);
+      setCustomerNotes(saved ? JSON.parse(saved) : []);
+    } catch {
+      setCustomerNotes([]);
+    } finally {
+      setNotesHydrated(true);
+    }
+  }, [cafeId, mounted]);
+
+  useEffect(() => {
+    if (!notesHydrated || !cafeId) return;
+    window.localStorage.setItem(`chef-customer-notes:${cafeId}`, JSON.stringify(customerNotes));
+  }, [cafeId, customerNotes, notesHydrated]);
 
   const draftItemsDetailed = useMemo(() => {
     return orderDraft.items
@@ -815,6 +875,37 @@ export default function KitchenPage() {
 
   const clearQuickOrderDraft = () => {
     setQuickOrderDraft(createEmptyOrderDraft("pending"));
+    setQuickOrderError("");
+  };
+
+  const addCustomerNote = (event) => {
+    event.preventDefault();
+    const customerName = noteDraft.customerName.trim();
+    const note = noteDraft.note.trim();
+    if (!customerName || !note) return;
+    setCustomerNotes((previous) => [
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        customerName,
+        phone: noteDraft.phone.trim(),
+        amountDue: Number(noteDraft.amountDue || 0),
+        note,
+        status: "open",
+        createdAt: new Date().toISOString(),
+      },
+      ...previous,
+    ]);
+    setNoteDraft({ customerName: "", phone: "", amountDue: "", note: "" });
+  };
+
+  const toggleCustomerNoteStatus = (id) => {
+    setCustomerNotes((previous) => previous.map((entry) => (
+      entry.id === id ? { ...entry, status: entry.status === "paid" ? "open" : "paid" } : entry
+    )));
+  };
+
+  const removeCustomerNote = (id) => {
+    setCustomerNotes((previous) => previous.filter((entry) => entry.id !== id));
   };
 
   const printReceipt = (order, billType = "customer") => {
@@ -1194,8 +1285,8 @@ export default function KitchenPage() {
     if (!phone) {
       return { error: "Phone number is required for a manual order" };
     }
-    if (!phone.replace(/\D/g, "")) {
-      return { error: "Enter a valid phone number" };
+    if (!/^\d{7,15}$/.test(phone)) {
+      return { error: "Enter a valid phone number with 7 to 15 digits" };
     }
     if (!Array.isArray(draft.items) || draft.items.length === 0) {
       return { error: "Add at least one item to the order" };
@@ -1337,12 +1428,12 @@ export default function KitchenPage() {
   const submitQuickOrderPreview = async () => {
     const result = buildOrderPayloadFromDraft(quickOrderDraft);
     if (result.error) {
-      setError(result.error);
+      setQuickOrderError(result.error);
       return;
     }
 
     setEditorSaving(true);
-    setError("");
+    setQuickOrderError("");
     try {
       const updated = await apiFetch("/api/orders/staff", {
         method: "POST",
@@ -1363,7 +1454,7 @@ export default function KitchenPage() {
       setLastCreatedOrder(updated);
       clearQuickOrderDraft();
     } catch (e) {
-      setError(e.message || "Failed to create quick order");
+      setQuickOrderError(e.message || "Failed to create quick order");
     } finally {
       setEditorSaving(false);
     }
@@ -1394,12 +1485,13 @@ export default function KitchenPage() {
       }
       title="Chef dashboard"
       subtitle="Take orders, prepare them, serve guests, and complete payment from one dashboard."
+      wide
       actions={
         <>
           <SoundControl />
         </>
       }
-      contentClassName="mx-auto w-full max-w-7xl pb-10"
+      contentClassName="w-full max-w-none pb-10"
     >
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-3">
@@ -1536,55 +1628,189 @@ export default function KitchenPage() {
           >
             Cigarettes
           </button>
+          <button
+            type="button"
+            onClick={() => setKitchenTab("notes")}
+            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
+              kitchenTab === "notes"
+                ? "bg-slate-900 text-white shadow"
+                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            }`}
+          >
+            <StickyNote className="h-4 w-4" />
+            Notes
+            {customerNotes.filter((entry) => entry.status !== "paid").length ? (
+              <span className="rounded-full bg-white/20 px-1.5 text-xs">
+                {customerNotes.filter((entry) => entry.status !== "paid").length}
+              </span>
+            ) : null}
+          </button>
         </div>
 
         {kitchenTab === "cigarettes" ? (
           <CigarettePanel cafeId={cafeId} token={token} cafeInfo={cafeInfo} canCreate canMarkPaid />
+        ) : kitchenTab === "notes" ? (
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(20rem,0.8fr)_minmax(0,1.5fr)]">
+            <form onSubmit={addCustomerNote} className="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
+              <div className="flex items-start gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400">
+                  <StickyNote className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-lg font-black text-slate-900 dark:text-slate-100">Add customer note</div>
+                  <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">Record unpaid balances, regular-customer arrangements, or reminders for later collection.</div>
+                </div>
+              </div>
+              <div className="mt-5 space-y-4">
+                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Customer name <span className="text-red-600">*</span>
+                  <Input className="mt-1.5" value={noteDraft.customerName} onChange={(e) => setNoteDraft((previous) => ({ ...previous, customerName: e.target.value }))} placeholder="Customer name" required />
+                </label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Phone number <span className="font-normal normal-case">(optional)</span>
+                  <Input className="mt-1.5" value={noteDraft.phone} onChange={(e) => setNoteDraft((previous) => ({ ...previous, phone: sanitizePhoneInput(e.target.value) }))} placeholder="Phone number" type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} />
+                </label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Amount due <span className="font-normal normal-case">(optional)</span>
+                  <Input className="mt-1.5" value={noteDraft.amountDue} onChange={(e) => setNoteDraft((previous) => ({ ...previous, amountDue: e.target.value }))} placeholder="0.00" type="number" min="0" step="0.01" />
+                </label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Note <span className="text-red-600">*</span>
+                  <Textarea className="mt-1.5 min-h-[8rem]" value={noteDraft.note} onChange={(e) => setNoteDraft((previous) => ({ ...previous, note: e.target.value }))} placeholder="Example: Regular customer — will clear the balance at month end." required />
+                </label>
+                <Button type="submit" className="w-full">Save note</Button>
+              </div>
+            </form>
+
+            <section className="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
+                <div>
+                  <div className="text-lg font-black text-slate-900 dark:text-slate-100">Payment notes</div>
+                  <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">Open dues stay here until the customer pays.</div>
+                </div>
+                <div className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-bold text-orange-800 dark:border-orange-500/20 dark:bg-orange-950/30 dark:text-orange-300">
+                  {customerNotes.filter((entry) => entry.status !== "paid").length} open
+                </div>
+              </div>
+              <div className="mt-4 space-y-3">
+                {customerNotes.length ? customerNotes.map((entry) => (
+                  <article key={entry.id} className={`rounded-2xl border p-4 ${entry.status === "paid" ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-500/20 dark:bg-emerald-950/10" : "border-orange-200 bg-orange-50/40 dark:border-orange-500/20 dark:bg-orange-950/10"}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-base font-black text-slate-900 dark:text-slate-100">{entry.customerName}</div>
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${entry.status === "paid" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300" : "bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-300"}`}>{entry.status === "paid" ? "Paid" : "Open due"}</span>
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{entry.phone || "No phone number"} · {new Date(entry.createdAt).toLocaleDateString()}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Amount due</div>
+                        <div className="text-lg font-black tabular-nums text-slate-900 dark:text-slate-100">₹{Number(entry.amountDue || 0).toFixed(2)}</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 rounded-xl bg-white/80 px-3 py-2 text-sm leading-relaxed text-slate-700 dark:bg-slate-950/40 dark:text-slate-300">{entry.note}</div>
+                    <div className="mt-3 flex flex-wrap justify-end gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => toggleCustomerNoteStatus(entry.id)}>
+                        <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                        {entry.status === "paid" ? "Mark open" : "Mark paid"}
+                      </Button>
+                      <Button type="button" variant="danger" size="sm" onClick={() => removeCustomerNote(entry.id)}>
+                        <Trash2 className="mr-1.5 h-4 w-4" /> Delete
+                      </Button>
+                    </div>
+                  </article>
+                )) : (
+                  <div className="rounded-2xl border border-dashed border-slate-300 px-5 py-16 text-center dark:border-slate-700">
+                    <StickyNote className="mx-auto h-8 w-8 text-slate-400" />
+                    <div className="mt-3 text-sm font-bold text-slate-700 dark:text-slate-200">No payment notes yet</div>
+                    <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">Saved notes will appear here for follow-up.</div>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
         ) : (
           <>
         {/* ── Category grid ── */}
-        <div className="rounded-2xl border border-dashed border-orange-200/70 bg-white/55 px-4 py-4 shadow-sm backdrop-blur-sm dark:border-white/[0.06] dark:bg-slate-900/40">
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(24rem,0.75fr)]">
+        <div className="min-w-0 rounded-2xl border border-dashed border-orange-200/70 bg-white/55 p-4 shadow-sm backdrop-blur-sm dark:border-white/[0.06] dark:bg-slate-900/40">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-800 dark:border-orange-500/20 dark:bg-orange-950/30 dark:text-orange-400">
-              {allQuickOrderCategories.length
-                ? `${allQuickOrderCategories.length} categor${allQuickOrderCategories.length === 1 ? "y" : "ies"}`
-                : "No categories yet"}
+            <div>
+              <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Menu items</div>
+              <div className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                {quickOrderCategory === "All" ? "Most ordered items first" : quickOrderCategory}
+              </div>
             </div>
             <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
-              {menuItems.length} menu item{menuItems.length === 1 ? "" : "s"}
+              {quickOrderGridItems.length} item{quickOrderGridItems.length === 1 ? "" : "s"}
             </div>
           </div>
 
-          <div className="mt-4 rounded-3xl border border-orange-100 bg-white/80 p-4 shadow-sm dark:border-white/[0.06] dark:bg-slate-900/70">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
-              {menuLoading ? (
-                Array.from({ length: 15 }).map((_, i) => (
-                  <div
-                    key={`ql-${i}`}
-                    className="aspect-[1.1] animate-pulse rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800/50"
-                  />
-                ))
-              ) : allQuickOrderCategories.length ? (
-                allQuickOrderCategories.map((cat) => (
+          <div className="mt-4 grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
+            <aside className="rounded-2xl border border-slate-200 bg-white/80 p-2 dark:border-slate-800 dark:bg-slate-900/70">
+              <div className="px-2 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Categories</div>
+              <div className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-1 lg:overflow-visible">
+                <button
+                  type="button"
+                  onClick={() => { setQuickOrderCategory("All"); setQuickOrderItemSearch(""); }}
+                  className={`whitespace-nowrap rounded-xl px-3 py-2 text-left text-sm font-bold transition lg:block lg:w-full ${quickOrderCategory === "All" ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-orange-50 hover:text-orange-800 dark:text-slate-300 dark:hover:bg-orange-950/30 dark:hover:text-orange-300"}`}
+                >
+                  All items
+                  <span className={`ml-1 text-xs font-semibold ${quickOrderCategory === "All" ? "text-orange-100" : "text-slate-400"}`}>({menuItems.length})</span>
+                </button>
+                {allQuickOrderCategories.map((cat) => (
                   <button
                     key={cat.name}
                     type="button"
-                    onClick={() => setQuickOrderCategoryModal(cat.name)}
-                    className="group flex aspect-[1.1] min-h-[7rem] flex-col items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50 px-3 py-4 text-center shadow-sm transition hover:border-orange-300 hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 active:scale-[0.98] dark:border-slate-800 dark:from-slate-900/90 dark:to-slate-950/80 dark:hover:border-orange-500/40 dark:hover:bg-orange-950/10 dark:hover:from-slate-900 dark:hover:to-slate-900"
+                    onClick={() => setQuickOrderCategory(cat.name)}
+                    className={`rounded-xl px-3 py-2 text-left text-sm font-semibold transition lg:block lg:w-full ${quickOrderCategory === cat.name ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-orange-50 hover:text-orange-800 dark:text-slate-300 dark:hover:bg-orange-950/30 dark:hover:text-orange-300"}`}
                   >
-                    <div className="line-clamp-2 text-base font-black leading-tight text-slate-900 transition group-hover:text-orange-800 md:text-lg dark:text-slate-100 dark:group-hover:text-orange-400">
-                      {cat.name}
-                    </div>
-                    <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      {cat.count} item{cat.count === 1 ? "" : "s"}
-                    </div>
+                    <span className="break-words">{cat.name}</span>
+                    <span className={`ml-1 text-xs ${quickOrderCategory === cat.name ? "text-orange-100" : "text-slate-400"}`}>({cat.count})</span>
                   </button>
-                ))
-              ) : (
-                <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
-                  No menu categories found for this cafe.
-                </div>
-              )}
+                ))}
+              </div>
+            </aside>
+
+            <div className="min-w-0">
+              <Input
+                value={quickOrderItemSearch}
+                onChange={(e) => setQuickOrderItemSearch(e.target.value)}
+                placeholder="Search items by name, category, or description"
+                aria-label="Search quick order items"
+              />
+              <div className="mt-3 max-h-[min(65vh,42rem)] overflow-y-auto pr-1 [scrollbar-width:thin]">
+                {menuLoading ? (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+                    {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-28 animate-pulse rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800/50" />)}
+                  </div>
+                ) : quickOrderGridItems.length ? (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+                    {quickOrderGridItems.map((item) => {
+                      const selectedQty = quickOrderDraft.items.find((line) => String(line.menuItemId) === String(item._id || item.menuItemId))?.qty;
+                      return (
+                        <button
+                          key={item._id || item.menuItemId}
+                          type="button"
+                          onClick={() => addQuickOrderItem(item._id || item.menuItemId)}
+                          className={`group flex min-h-[8.5rem] flex-col justify-between rounded-2xl border p-3 text-left shadow-sm transition active:scale-[0.98] ${selectedQty ? "border-orange-400 bg-orange-50 ring-1 ring-orange-200 dark:bg-orange-950/20" : "border-slate-200 bg-white hover:border-orange-300 hover:bg-orange-50/60 dark:border-slate-800 dark:bg-slate-900/80 dark:hover:border-orange-500/50"}`}
+                        >
+                          <div>
+                            <div className="line-clamp-2 text-sm font-bold leading-snug text-slate-900 group-hover:text-orange-800 dark:text-slate-100 dark:group-hover:text-orange-300">{item.name}</div>
+                            <div className="mt-1 line-clamp-1 text-[11px] text-slate-500 dark:text-slate-400">{item.category || "Menu item"}</div>
+                          </div>
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            <span className="text-sm font-black tabular-nums text-orange-700 dark:text-orange-400">Rs {Number(item.price || 0).toFixed(0)}</span>
+                            <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-orange-500 px-2 text-xs font-black text-white">{selectedQty ? `×${selectedQty}` : "+"}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-12 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">No items match your search.</div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1685,7 +1911,15 @@ export default function KitchenPage() {
         ) : null}
 
         {quickOrderDraftItemsDetailed.length ? (
-          <div className="rounded-2xl border border-orange-100/80 bg-white/90 p-4 shadow-sm ring-1 ring-orange-50/80 backdrop-blur-sm dark:border-white/[0.06] dark:bg-slate-900/95 dark:ring-white/[0.04]">
+          <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-white/95 p-4 shadow-lg shadow-slate-200/40 ring-1 ring-slate-100/80 backdrop-blur-sm dark:border-white/[0.06] dark:bg-slate-900/95 dark:ring-white/[0.04] xl:sticky xl:top-5">
+            {quickOrderError && (
+              <div
+                className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
+                role="alert"
+              >
+                {quickOrderError}
+              </div>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -1701,7 +1935,7 @@ export default function KitchenPage() {
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,16rem)_1fr]">
+            <div className="mt-4 space-y-3">
               <div className="space-y-3">
                 <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Table number <span className="font-normal normal-case">(optional)</span>
@@ -1732,7 +1966,10 @@ export default function KitchenPage() {
                     onChange={(e) => setQuickOrderDraft((prev) => ({ ...prev, phone: e.target.value }))}
                     placeholder="Phone number"
                     type="tel"
-                    inputMode="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    minLength={7}
+                    maxLength={15}
                     required
                   />
                 </label>
@@ -1820,7 +2057,34 @@ export default function KitchenPage() {
               </div>
             </div>
           </div>
-        ) : null}
+        ) : (
+          <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-white/95 p-5 shadow-lg shadow-slate-200/40 ring-1 ring-slate-100/80 dark:border-white/[0.06] dark:bg-slate-900/95 dark:ring-white/[0.04] xl:sticky xl:top-5">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Current order</div>
+                <div className="mt-1 text-xl font-black text-slate-900 dark:text-slate-100">Checkout</div>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400">
+                <ClipboardList className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="flex min-h-[15rem] flex-col items-center justify-center py-8 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                <ClipboardList className="h-7 w-7" />
+              </div>
+              <div className="mt-4 text-sm font-bold text-slate-800 dark:text-slate-200">No items added yet</div>
+              <div className="mt-1 max-w-[16rem] text-xs leading-relaxed text-slate-500 dark:text-slate-400">Choose a category and add menu items to start a new order.</div>
+            </div>
+            <div className="border-t border-slate-100 pt-4 dark:border-slate-800">
+              <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
+                <span>Total</span>
+                <span className="text-lg font-black tabular-nums text-slate-900 dark:text-slate-100">₹0.00</span>
+              </div>
+              <Button type="button" className="mt-4 w-full" disabled>Confirm order</Button>
+            </div>
+          </div>
+        )}
+        </div>
 
         <div className="rounded-2xl border border-slate-200/90 bg-white/70 p-4 shadow-sm ring-1 ring-slate-100/80 backdrop-blur-sm dark:border-white/[0.06] dark:bg-slate-900/75 dark:ring-white/[0.04]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -2991,6 +3255,10 @@ export default function KitchenPage() {
                     onChange={(e) => updateDraftField("phone", e.target.value)}
                     placeholder="Phone number *"
                     type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    minLength={7}
+                    maxLength={15}
                     required
                   />
                   <select

@@ -21,6 +21,7 @@ export function StaffShell({
   toolbarClassName = "",
   contentClassName = "",
   dense = false,
+  wide = false,
   /** @type {{ variant: 'kitchen' | 'waiter' | 'admin' | 'super_admin' | 'history', onRefresh?: () => void, historyHref?: string, dashboardHref?: string, backLabel?: string } | null} */
   staffNav = null,
 }) {
@@ -107,7 +108,7 @@ export function StaffShell({
       <div className="pointer-events-none absolute inset-0 bg-grid opacity-30" />
       <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-orange-300/30 blur-3xl" />
       <div className="pointer-events-none absolute bottom-0 -left-24 h-72 w-72 rounded-full bg-emerald-300/20 blur-3xl" />
-      <div className={`relative mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8 ${dense ? "py-3" : ""}`}>
+      <div className={`relative mx-auto w-full ${wide ? "max-w-[1800px]" : "max-w-7xl"} px-4 py-4 sm:px-6 lg:px-8 ${dense ? "py-3" : ""}`}>
         <header
           className={`mb-6 flex flex-col gap-3 border-b border-slate-200/80 pb-4 sm:flex-row sm:items-end sm:justify-between ${toolbarClassName}`}
         >

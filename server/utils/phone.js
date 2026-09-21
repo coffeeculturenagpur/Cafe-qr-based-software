@@ -5,4 +5,9 @@ function normalizePhone(input) {
   return digits;
 }
 
-module.exports = { normalizePhone };
+/** Validate the user-entered phone before normalizePhone can discard invalid characters. */
+function isValidPhone(input) {
+  return typeof input === "string" && /^\d{7,15}$/.test(input.trim());
+}
+
+module.exports = { normalizePhone, isValidPhone };

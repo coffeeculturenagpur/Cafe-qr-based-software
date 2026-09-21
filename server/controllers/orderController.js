@@ -13,7 +13,7 @@ const {
   signCustomerCookie,
   getCurrentCustomer,
 } = require("../controllers/customerController");
-const { normalizePhone } = require("../utils/phone");
+const { isValidPhone, normalizePhone } = require("../utils/phone");
 const {
   attachOrderToSession,
   getTrackedOrderIds,
@@ -331,8 +331,11 @@ exports.createOrder = async (req, res) => {
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "items[] is required" });
     }
-    const normalizedPhone = normalizePhone(String(phone));
-    if (!normalizedPhone) return res.status(400).json({ message: "phone is required" });
+    const rawPhone = typeof phone === "string" ? phone.trim() : "";
+    if (!isValidPhone(rawPhone)) {
+      return res.status(400).json({ message: "phone must contain 7 to 15 digits" });
+    }
+    const normalizedPhone = normalizePhone(rawPhone);
     const sessionId = req.sessionId || "";
     const linkedCustomer = await upsertCustomerFromOrder({
       phone: normalizedPhone,
@@ -677,7 +680,8 @@ exports.createStaffOrder = async (req, res) => {
       ? null
       : Number(rawTableNumber);
     let customerName = String(req.body?.customerName || "").trim();
-    let phone = normalizePhone(String(req.body?.phone || "").trim());
+    const rawPhone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+    let phone = normalizePhone(rawPhone);
     const notes = typeof req.body?.notes === "string" ? req.body.notes.trim() : "";
     const requestedOrderType = String(req.body?.orderType || "").trim().toLowerCase();
     const status = typeof req.body?.status === "string" ? req.body.status.trim().toLowerCase() : "pending";
@@ -719,7 +723,9 @@ exports.createStaffOrder = async (req, res) => {
       phone = "";
     } else {
       if (!customerName) return res.status(400).json({ message: "customerName is required for manual orders" });
-      if (!phone) return res.status(400).json({ message: "phone is required for manual orders" });
+      if (!isValidPhone(rawPhone)) {
+        return res.status(400).json({ message: "phone must contain 7 to 15 digits" });
+      }
     }
 
     if (orderType === "cigarette" && !allCigarette) {
@@ -848,7 +854,11 @@ exports.updateOrder = async (req, res) => {
     }
 
     if (Object.prototype.hasOwnProperty.call(update, "phone")) {
-      update.phone = normalizePhone(String(update.phone || "")) || prev.phone;
+      const rawPhone = typeof update.phone === "string" ? update.phone.trim() : "";
+      if (!isValidPhone(rawPhone)) {
+        return res.status(400).json({ message: "phone must contain 7 to 15 digits" });
+      }
+      update.phone = normalizePhone(rawPhone);
     }
 
     if (Object.prototype.hasOwnProperty.call(update, "notes")) {
