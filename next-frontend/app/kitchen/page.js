@@ -1732,8 +1732,8 @@ export default function KitchenPage() {
         ) : (
           <>
         {/* ── Category grid ── */}
-        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(24rem,0.75fr)]">
-        <div className="min-w-0 rounded-2xl border border-dashed border-orange-200/70 bg-white/55 p-4 shadow-sm backdrop-blur-sm dark:border-white/[0.06] dark:bg-slate-900/40">
+        <div className="grid min-w-0 items-start gap-6 overflow-x-hidden xl:grid-cols-[minmax(0,1.7fr)_minmax(24rem,0.75fr)]">
+        <div className="min-w-0 max-w-full rounded-2xl border border-dashed border-orange-200/70 bg-white/55 p-3 shadow-sm backdrop-blur-sm sm:p-4 dark:border-white/[0.06] dark:bg-slate-900/40">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Menu items</div>
@@ -1746,14 +1746,14 @@ export default function KitchenPage() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
-            <aside className="rounded-2xl border border-slate-200 bg-white/80 p-2 dark:border-slate-800 dark:bg-slate-900/70">
+          <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
+            <aside className="min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white/80 p-2 dark:border-slate-800 dark:bg-slate-900/70">
               <div className="px-2 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Categories</div>
-              <div className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-1 lg:overflow-visible">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:block lg:space-y-1">
                 <button
                   type="button"
                   onClick={() => { setQuickOrderCategory("All"); setQuickOrderItemSearch(""); }}
-                  className={`whitespace-nowrap rounded-xl px-3 py-2 text-left text-sm font-bold transition lg:block lg:w-full ${quickOrderCategory === "All" ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-orange-50 hover:text-orange-800 dark:text-slate-300 dark:hover:bg-orange-950/30 dark:hover:text-orange-300"}`}
+                  className={`min-h-14 w-full rounded-xl px-2 py-2 text-center text-xs font-bold leading-snug transition sm:px-3 sm:text-sm lg:min-h-0 lg:text-left ${quickOrderCategory === "All" ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-orange-50 hover:text-orange-800 dark:text-slate-300 dark:hover:bg-orange-950/30 dark:hover:text-orange-300"}`}
                 >
                   All items
                   <span className={`ml-1 text-xs font-semibold ${quickOrderCategory === "All" ? "text-orange-100" : "text-slate-400"}`}>({menuItems.length})</span>
@@ -1763,7 +1763,7 @@ export default function KitchenPage() {
                     key={cat.name}
                     type="button"
                     onClick={() => setQuickOrderCategory(cat.name)}
-                    className={`rounded-xl px-3 py-2 text-left text-sm font-semibold transition lg:block lg:w-full ${quickOrderCategory === cat.name ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-orange-50 hover:text-orange-800 dark:text-slate-300 dark:hover:bg-orange-950/30 dark:hover:text-orange-300"}`}
+                    className={`min-h-14 w-full rounded-xl px-2 py-2 text-center text-xs font-semibold leading-snug transition sm:px-3 sm:text-sm lg:min-h-0 lg:text-left ${quickOrderCategory === cat.name ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-orange-50 hover:text-orange-800 dark:text-slate-300 dark:hover:bg-orange-950/30 dark:hover:text-orange-300"}`}
                   >
                     <span className="break-words">{cat.name}</span>
                     <span className={`ml-1 text-xs ${quickOrderCategory === cat.name ? "text-orange-100" : "text-slate-400"}`}>({cat.count})</span>

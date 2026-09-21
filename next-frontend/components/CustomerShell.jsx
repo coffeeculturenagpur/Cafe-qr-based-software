@@ -11,7 +11,7 @@ export function CustomerShell({
   return (
     <div className={`customer-shell min-h-screen ${className}`}>
       <div
-        className={`mx-auto w-full min-h-screen px-4 pt-4 sm:px-5 ${bottomInsetClass} ${maxWidthClass}`}
+        className={`mx-auto min-h-screen w-full min-w-0 overflow-x-hidden px-2 pt-2 sm:px-5 sm:pt-4 ${bottomInsetClass} ${maxWidthClass}`}
       >
         {children}
       </div>
