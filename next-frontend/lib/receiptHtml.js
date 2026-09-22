@@ -69,13 +69,14 @@ export function buildReceiptHtml(order, cafeInfo, options = {}) {
       * { box-sizing: border-box; }
       html, body {
         margin: 0; padding: 0; background: #fff; color: #111827;
-        font-family: "Courier New", Courier, monospace; font-size: 11px; line-height: 1.35;
+        font-family: "Courier New", Courier, monospace; font-size: 11px; line-height: 1.35; font-weight: 700;
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
       }
       body { width: 74mm; margin: 0 auto; padding: 2mm 0; }
+      body, body * { font-weight: 700 !important; color: #000 !important; }
       h1 { margin: 0; font-size: 15px; text-align: center; letter-spacing: 0.04em; }
       .center { text-align: center; }
-      .logo { display: block; margin: 0 auto 6px; max-width: 110px; max-height: 48px; object-fit: contain; }
+      .logo { display: block; margin: 0 auto 6px; max-width: 150px; max-height: 82px; object-fit: contain; }
       .cafe-name {
         margin-bottom: 4px; font-size: 14px; font-weight: 700; text-align: center;
         text-transform: uppercase; word-break: break-word;

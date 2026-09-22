@@ -37,6 +37,7 @@ export function CigarettePanel({
   canCreate = true,
   canMarkPaid = true,
   canManagePrincipal = false,
+  canResetPrincipal = false,
   id,
   className = "",
   variant = "checkout",
@@ -392,9 +393,11 @@ export function CigarettePanel({
                 <Button type="button" variant="outline" disabled={savingId === "principal-balance"} onClick={() => savePrincipalBalance(Number(principalDraft))}>
                   {savingId === "principal-balance" ? "Saving..." : "Save principal"}
                 </Button>
+                {canResetPrincipal && (
                 <Button type="button" variant="outline" className="border-red-200 text-red-700" disabled={savingId === "principal-balance"} onClick={resetPrincipalBalance}>
                   {savingId === "principal-balance" ? "Resetting..." : "Reset principal"}
                 </Button>
+                )}
               </div>
             ) : null}
           </div>

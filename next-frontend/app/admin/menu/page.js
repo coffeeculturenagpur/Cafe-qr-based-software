@@ -2996,6 +2996,7 @@ export default function AdminMenuPage() {
                     canCreate
                     canMarkPaid
                     canManagePrincipal
+                    canResetPrincipal
                     variant="admin"
                   />
                 ) : (

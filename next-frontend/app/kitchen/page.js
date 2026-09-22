@@ -38,7 +38,7 @@ import {
 } from "../../lib/orderTiming";
 import { TableStatusPad } from "../../components/staff/TableStatusPad";
 import { CigarettePanel } from "../../components/staff/CigarettePanel";
-import { ChevronDown, ClipboardList, QrCode, X, Check, Printer, StickyNote, Trash2, CheckCircle2 } from "lucide-react";
+import { ChevronDown, ClipboardList, QrCode, X, Check, Printer, StickyNote, CheckCircle2 } from "lucide-react";
 import {
   buildQuickOrderCategoryLookup,
   canonicalizeQuickOrderCategory,
@@ -540,6 +540,7 @@ export default function KitchenPage() {
     [filteredOrders],
   );
   const groupedOrders = useMemo(() => groupOrdersByTable(orders), [orders]);
+  const walkInGroup = useMemo(() => groupedOrders.find((group) => group.tableKey === "walk-in") || null, [groupedOrders]);
   const selectedGroup = useMemo(
     () =>
       groupedOrders.find((group) => group.tableKey === selectedTableKey) ||
@@ -984,6 +985,7 @@ export default function KitchenPage() {
               print-color-adjust: exact;
             }
 
+            body, body * { font-weight: 700 !important; color: #000 !important; }
             body {
               width: 74mm;
               margin: 0 auto;
@@ -1004,8 +1006,8 @@ export default function KitchenPage() {
             .logo {
               display: block;
               margin: 0 auto 6px;
-              max-width: 110px;
-              max-height: 48px;
+              max-width: 150px;
+              max-height: 82px;
               object-fit: contain;
             }
 
@@ -1233,6 +1235,8 @@ export default function KitchenPage() {
             <div class="meta">
               <div>Order: #${orderIdShort}</div>
               <div>Table: ${order.tableNumber || "Walk-in"}</div>
+              <div>Customer: ${String(order.customerName || "Guest")}</div>
+              <div>Phone: ${String(order.phone || "No phone number")}</div>
               <div>Time: ${new Date().toLocaleTimeString()}</div>
             </div>
             <div class="divider"></div>
@@ -1659,7 +1663,7 @@ export default function KitchenPage() {
         </div>
 
         {kitchenTab === "cigarettes" ? (
-          <CigarettePanel id="cigarette-counter" cafeId={cafeId} token={token} cafeInfo={cafeInfo} canCreate canMarkPaid />
+          <CigarettePanel id="cigarette-counter" cafeId={cafeId} token={token} cafeInfo={cafeInfo} canCreate canMarkPaid canManagePrincipal />
         ) : kitchenTab === "notes" ? (
           <div className="grid items-start gap-5 xl:grid-cols-[minmax(20rem,0.8fr)_minmax(0,1.5fr)]">
             <form onSubmit={addCustomerNote} className="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
@@ -2202,6 +2206,35 @@ export default function KitchenPage() {
           selectedTableNumber={selectedGroup?.tableNumber}
         />
 
+        {walkInGroup ? (
+          <section className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50 p-4 shadow-sm sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">Walk-in orders</div>
+                <div className="mt-1 text-sm text-slate-600">Manual orders without a table number</div>
+              </div>
+              <div className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900">{walkInGroup.orders.length + " active"}</div>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {walkInGroup.orders.map((order) => (
+                <button key={order._id} type="button" onClick={() => openTableOrders({ tableKey: "walk-in", tableNumber: 0, hasOrders: true })} className="rounded-2xl border border-amber-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-lg font-black text-slate-950">{order.customerName || "Walk-in customer"}</div>
+                      <div className="mt-1 text-xs font-semibold text-slate-500">{order.phone || "No phone number"}</div>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-amber-900">Walk-in</span>
+                  </div>
+                  <div className="mt-3 text-xs text-slate-600">{(Array.isArray(order.items) ? order.items : []).map((item) => item.name + " ×" + item.qty).join(" · ")}</div>
+                  <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+                    <span className="text-xs font-bold text-slate-500">Order #{String(order._id).slice(-6).toUpperCase()}</span>
+                    <span className="font-black text-slate-950">Rs {Number(order.totalAmount || 0).toFixed(0)}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
         {false && (
           <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 2xl:grid-cols-3">
             {groupedFilteredOrders.map((group) => {
@@ -2846,7 +2879,7 @@ export default function KitchenPage() {
                           : normalizedOrderStatus),
                     );
                     const nextStatusKey = statusSteps[activeStatusIndex + 1]?.key || "";
-                    const canPrintChefBill = [
+                    const canPrintChefBill = o.source === "manual" ? !["paid", "rejected"].includes(normalizedOrderStatus) : [
                       "accepted",
                       "preparing",
                       "baking",
@@ -2854,9 +2887,9 @@ export default function KitchenPage() {
                       "served",
                       "paid",
                     ].includes(normalizedOrderStatus);
-                    const canPrintCustomerBill = ["served", "paid"].includes(
-                      normalizedOrderStatus,
-                    );
+                    const canPrintCustomerBill = o.source === "manual"
+                      ? !["paid", "rejected"].includes(normalizedOrderStatus)
+                      : ["served", "paid"].includes(normalizedOrderStatus);
                     const itemCount = (
                       Array.isArray(o.items) ? o.items : []
                     ).reduce((sum, item) => sum + Number(item?.qty || 0), 0);
@@ -3059,7 +3092,7 @@ export default function KitchenPage() {
                                 Tap the next step as the order moves
                               </div>
                             </div>
-                            <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                            <div className={o.source === "manual" ? "hidden" : "mb-3 grid grid-cols-2 gap-2 sm:grid-cols-5"}>
                               {statusSteps.map((step, stepIndex) => {
                                 const isCurrent = activeStatusIndex === stepIndex;
                                 const isComplete = activeStatusIndex > stepIndex;
@@ -3092,9 +3125,9 @@ export default function KitchenPage() {
                             </div>
 
                             <div className="mb-2 px-1 text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-500">
-                              Update status
+                              {o.source === "manual" ? "" : "Update status"}
                             </div>
-                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            <div className={o.source === "manual" ? "hidden" : "grid grid-cols-2 gap-2 sm:grid-cols-4"}>
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -3144,6 +3177,11 @@ export default function KitchenPage() {
                               Order tools
                             </div>
                             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                              {o.source === "manual" && (
+                                <Button variant="outline" size="sm" className={kitchenActionButtonClass("served")} onClick={() => setStatus(o._id, "served")} disabled={loading || ["served", "paid", "rejected"].includes(normalizedOrderStatus)}>
+                                  Mark served
+                                </Button>
+                              )}
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -3159,7 +3197,7 @@ export default function KitchenPage() {
                                 size="sm"
                                 className={kitchenActionButtonClass("paid")}
                                 onClick={() => setStatus(o._id, "paid")}
-                                disabled={loading}
+                                disabled={loading || (o.source === "manual" && normalizedOrderStatus !== "served")}
                                 aria-label="Mark order as paid"
                               >
                                 Mark paid
@@ -3183,7 +3221,7 @@ export default function KitchenPage() {
                                   disabled={loading}
                                 >
                                   <Printer className="mr-1.5 h-3.5 w-3.5" />
-                                  Print chef bill
+                                  KOT
                                 </Button>
                               )}
                               {canPrintCustomerBill && (
