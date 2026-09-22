@@ -18,6 +18,18 @@ router.patch(
   requireRole(['kitchen', 'staff', 'cafe_admin', 'super_admin']),
   menuController.updateCigaretteStock
 );
+router.get(
+  '/cigarette-principal/:cafeId',
+  requireAuth,
+  requireRole(['kitchen', 'staff', 'cafe_admin', 'super_admin']),
+  menuController.getCigarettePrincipalBalance
+);
+router.patch(
+  '/cigarette-principal/:cafeId',
+  requireAuth,
+  requireRole(['kitchen', 'cafe_admin', 'super_admin']),
+  menuController.updateCigarettePrincipalBalance
+);
 router.get('/:cafeId', menuController.getMenuByCafe);
 
 //admin routes

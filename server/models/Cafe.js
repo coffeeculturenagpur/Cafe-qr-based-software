@@ -38,6 +38,8 @@ const cafeSchema = new mongoose.Schema(
       type: [{ type: String, trim: true }],
       default: [],
     },
+    /** Shared counter float for all cigarette sales. Paid tickets deduct their sale total. */
+    cigarettePrincipalBalance: { type: Number, default: 0 },
     /** Admin-managed ordered list of category names shown in the kitchen quick-order grid */
     quickOrderCategories: {
       type: [{ type: String, trim: true }],
@@ -72,4 +74,3 @@ const cafeSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model("Cafe", cafeSchema);
-

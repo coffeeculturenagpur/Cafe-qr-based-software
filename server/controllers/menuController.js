@@ -172,6 +172,40 @@ exports.updateCigaretteStock = async (req, res) => {
   }
 };
 
+exports.getCigarettePrincipalBalance = async (req, res) => {
+  try {
+    const cafeId = toValidObjectId(req.params.cafeId);
+    if (!cafeId) return res.status(400).json({ message: "Invalid cafeId" });
+    if (!canAccessCafe(req.user, String(cafeId))) return forbiddenTenant(res);
+    const cafe = await Cafe.findById(cafeId).select("cigarettePrincipalBalance").lean();
+    if (!cafe) return res.status(404).json({ message: "Cafe not found" });
+    return res.json({ principalBalance: Number(cafe.cigarettePrincipalBalance || 0) });
+  } catch (error) {
+    return res.status(500).json({ message: error.message || "Server error" });
+  }
+};
+
+exports.updateCigarettePrincipalBalance = async (req, res) => {
+  try {
+    const cafeId = toValidObjectId(req.params.cafeId);
+    const principalBalance = Number(req.body?.principalBalance);
+    if (!cafeId) return res.status(400).json({ message: "Invalid cafeId" });
+    if (!canAccessCafe(req.user, String(cafeId))) return forbiddenTenant(res);
+    if (!Number.isFinite(principalBalance) || principalBalance < 0) {
+      return res.status(400).json({ message: "Principal balance must be a non-negative number" });
+    }
+    const cafe = await Cafe.findByIdAndUpdate(
+      cafeId,
+      { $set: { cigarettePrincipalBalance: Number(principalBalance.toFixed(2)) } },
+      { new: true }
+    ).select("cigarettePrincipalBalance");
+    if (!cafe) return res.status(404).json({ message: "Cafe not found" });
+    return res.json({ principalBalance: Number(cafe.cigarettePrincipalBalance || 0) });
+  } catch (error) {
+    return res.status(500).json({ message: error.message || "Server error" });
+  }
+};
+
 // Add a new item
 exports.adddMenuItem = async (req, res) => {
   try {

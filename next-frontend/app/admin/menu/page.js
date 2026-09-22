@@ -205,6 +205,10 @@ export default function AdminMenuPage() {
     "Cigarettes",
   ];
   const [menuCategories, setMenuCategories] = useState(defaultCategories);
+  const [newCigaretteItemName, setNewCigaretteItemName] = useState("");
+  const [newCigaretteItemPrice, setNewCigaretteItemPrice] = useState("");
+  const [newCigaretteItemCategory, setNewCigaretteItemCategory] = useState("Cigarettes");
+  const [cigarettePriceDrafts, setCigarettePriceDrafts] = useState({});
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -313,6 +317,10 @@ export default function AdminMenuPage() {
   const [quickOrderCigarette30PickerId, setQuickOrderCigarette30PickerId] = useState("");
   const [newQuickOrderCategoryName, setNewQuickOrderCategoryName] = useState("");
   const [newCigaretteCategoryName, setNewCigaretteCategoryName] = useState("");
+  const cigaretteMenuItems = useMemo(
+    () => filterCigaretteMenuItems(items, cafeForm),
+    [items, cafeForm]
+  );
   const [showcaseUploading, setShowcaseUploading] = useState(false);
   const [cafeLoading, setCafeLoading] = useState(false);
   const [cafeError, setCafeError] = useState("");
@@ -1811,6 +1819,93 @@ export default function AdminMenuPage() {
     }
   };
 
+  const addCigaretteItem = async () => {
+    const name = String(newCigaretteItemName || "").trim();
+    const category = String(newCigaretteItemCategory || "Cigarettes").trim() || "Cigarettes";
+    const priceNumber = Number(newCigaretteItemPrice);
+    if (!name) {
+      setError("Enter a cigarette name first.");
+      return;
+    }
+    if (!Number.isFinite(priceNumber) || priceNumber <= 0) {
+      setError("Enter a valid cigarette price greater than zero.");
+      return;
+    }
+    try {
+      setLoading(true);
+      setError("");
+      const body = {
+        name,
+        description: "",
+        price: priceNumber,
+        category,
+        type: "veg",
+        image: "",
+        isAvailable: true,
+        isSpecial: false,
+      };
+      if (role === "super_admin" && adminCafeId) body.cafeId = adminCafeId;
+      const created = await apiFetch("/api/admin/menu", {
+        method: "POST",
+        headers: { ...authHeaders() },
+        body: JSON.stringify(body),
+      });
+      setItems((prev) => {
+        const nextItems = upsertById(prev, created);
+        publishMenuUpdate(nextItems);
+        return nextItems;
+      });
+      setNewCigaretteItemName("");
+      setNewCigaretteItemPrice("");
+      setNewCigaretteItemCategory(resolveCigaretteCategories(cafeForm)[0] || "Cigarettes");
+      setCafeSuccess("Cigarette item added to the menu.");
+    } catch (e) {
+      setError(e.message || "Failed to add cigarette item");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateCigarettePrice = async (menuItem) => {
+    const itemId = menuItem?._id;
+    if (!itemId) return;
+    const priceValue = Number(cigarettePriceDrafts[itemId] ?? menuItem?.price ?? 0);
+    if (!Number.isFinite(priceValue) || priceValue <= 0) {
+      setError("Enter a valid cigarette price greater than zero.");
+      return;
+    }
+    try {
+      setLoading(true);
+      setError("");
+      const body = {
+        name: menuItem.name || "",
+        description: menuItem.description || "",
+        price: priceValue,
+        category: menuItem.category || "Cigarettes",
+        type: menuItem.type || "veg",
+        image: menuItem.image || "",
+        isSpecial: Boolean(menuItem.isSpecial),
+      };
+      if (role === "super_admin" && adminCafeId) body.cafeId = adminCafeId;
+      const updated = await apiFetch(`/api/admin/menu/${itemId}`, {
+        method: "PUT",
+        headers: { ...authHeaders() },
+        body: JSON.stringify(body),
+      });
+      setItems((prev) => {
+        const nextItems = prev.map((item) => (item._id === updated._id ? updated : item));
+        publishMenuUpdate(nextItems);
+        return nextItems;
+      });
+      setCigarettePriceDrafts((prev) => ({ ...prev, [itemId]: String(priceValue) }));
+      setCafeSuccess("Cigarette price updated.");
+    } catch (e) {
+      setError(e.message || "Failed to update cigarette price");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!authReady) {
     return (
       <StaffShell title="Menu management" subtitle="Loading sessionâ€¦" contentClassName="mx-auto max-w-6xl">
@@ -2818,6 +2913,81 @@ export default function AdminMenuPage() {
                   </div>
                 </div>
 
+                <div className="rounded-2xl border border-amber-100 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="font-semibold text-slate-900">Cigarette menu items</div>
+                      <div className="text-xs text-slate-500">Add new cigarette items or update prices directly here.</div>
+                    </div>
+                    <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-900">
+                      {cigaretteMenuItems.length} item{cigaretteMenuItems.length === 1 ? "" : "s"}
+                    </div>
+                  </div>
+
+                  <div className="mb-4 grid gap-3 md:grid-cols-[1.2fr_0.7fr_0.8fr_auto]">
+                    <Input
+                      placeholder="Cigarette name"
+                      value={newCigaretteItemName}
+                      onChange={(e) => setNewCigaretteItemName(e.target.value)}
+                    />
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Price"
+                      value={newCigaretteItemPrice}
+                      onChange={(e) => setNewCigaretteItemPrice(e.target.value)}
+                    />
+                    <select
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                      value={newCigaretteItemCategory}
+                      onChange={(e) => setNewCigaretteItemCategory(e.target.value)}
+                    >
+                      {resolveCigaretteCategories(cafeForm).map((categoryName) => (
+                        <option key={categoryName} value={categoryName}>{categoryName}</option>
+                      ))}
+                    </select>
+                    <Button type="button" onClick={addCigaretteItem} disabled={loading}>
+                      Add item
+                    </Button>
+                  </div>
+
+                  {cigaretteMenuItems.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                      No cigarette menu items yet. Add one above to make it available for counter sales.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {cigaretteMenuItems.map((item) => {
+                        const draftValue = cigarettePriceDrafts[item._id] ?? String(item.price ?? "");
+                        return (
+                          <div key={item._id} className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-bold text-slate-900">{item.name}</div>
+                              <div className="text-xs text-slate-500">{item.category}</div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="w-28"
+                                value={draftValue}
+                                onChange={(e) =>
+                                  setCigarettePriceDrafts((prev) => ({ ...prev, [item._id]: e.target.value }))
+                                }
+                              />
+                              <Button type="button" variant="outline" onClick={() => updateCigarettePrice(item)} disabled={loading}>
+                                Save price
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
                 {tablesCafeId ? (
                   <CigarettePanel
                     cafeId={tablesCafeId}
@@ -2825,6 +2995,8 @@ export default function AdminMenuPage() {
                     cafeInfo={cafeInfo || cafeForm}
                     canCreate
                     canMarkPaid
+                    canManagePrincipal
+                    variant="admin"
                   />
                 ) : (
                   <div className="text-sm text-slate-600">Select a cafe to manage cigarette orders.</div>

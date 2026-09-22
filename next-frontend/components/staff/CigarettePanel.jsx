@@ -36,8 +36,10 @@ export function CigarettePanel({
   cafeInfo,
   canCreate = true,
   canMarkPaid = true,
+  canManagePrincipal = false,
   id,
   className = "",
+  variant = "checkout",
 }) {
   const [menuItems, setMenuItems] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -48,7 +50,8 @@ export function CigarettePanel({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [socketState, setSocketState] = useState("disconnected");
-  const [pricingDrafts, setPricingDrafts] = useState({});
+  const [principalBalance, setPrincipalBalance] = useState(0);
+  const [principalDraft, setPrincipalDraft] = useState("");
 
   const cigaretteItems = useMemo(
     () => filterCigaretteMenuItems(menuItems, cafeInfo),
@@ -70,7 +73,7 @@ export function CigarettePanel({
     setError("");
     try {
       const qs = ordersTodayQueryString();
-      const [menu, list, history] = await Promise.all([
+      const [menu, list, history, principal] = await Promise.all([
         apiFetch(`/api/menu/${cafeId}/staff`, { headers: { ...authHeaders() } }),
         apiFetch(`/api/orders/${cafeId}?${qs}&orderType=cigarette&scope=cigarette_live`, {
           headers: { ...authHeaders() },
@@ -78,8 +81,12 @@ export function CigarettePanel({
         apiFetch(`/api/orders/${cafeId}?${qs}&orderType=cigarette&scope=history`, {
           headers: { ...authHeaders() },
         }),
+        apiFetch(`/api/menu/cigarette-principal/${cafeId}`, { headers: { ...authHeaders() } }),
       ]);
       setMenuItems(Array.isArray(menu) ? menu : []);
+      const nextPrincipalBalance = Number(principal?.principalBalance || 0);
+      setPrincipalBalance(nextPrincipalBalance);
+      setPrincipalDraft(String(nextPrincipalBalance));
       setOrders(filterCigaretteLiveOrders(Array.isArray(list) ? list : []));
       setPreviousOrders(
         (Array.isArray(history) ? history : []).filter((order) => ["paid", "rejected", "served"].includes(String(order.status || "").toLowerCase()))
@@ -105,6 +112,7 @@ export function CigarettePanel({
       const status = String(payload.status || "").toLowerCase();
       if (status === "paid" || status === "rejected") {
         setOrders((prev) => prev.filter((o) => o._id !== payload._id));
+        if (status === "paid") load();
         return;
       }
       setOrders((prev) => filterCigaretteLiveOrders(upsertOrder(prev, payload)));
@@ -172,34 +180,40 @@ export function CigarettePanel({
     draft.items.find((line) => String(line.menuItemId) === String(menuItemId))?.qty || 0
   );
 
-  const principalBalanceFor = (item) => Number(item.principalAmount || 0);
-  const profitBalanceFor = (item) => Number(item.profitAmount ?? 0);
-  const remainingBalanceFor = (item) => Number(item.remainingAmount ?? (principalBalanceFor(item) + profitBalanceFor(item)));
   const cigaretteOrderTotal = (order) => (order?.items || []).reduce((sum, item) => sum + getCigaretteSalePrice(item) * Number(item.qty || 0), 0);
 
-  const savePricing = async (item) => {
-    const values = pricingDrafts[String(item._id)] || {};
-    const principalAmount = Number(values.principalAmount ?? principalBalanceFor(item));
-    const profitAmount = Number(values.profitAmount ?? profitBalanceFor(item));
-    if (!Number.isFinite(principalAmount) || principalAmount < 0 || !Number.isFinite(profitAmount) || profitAmount < 0) {
-      setError("Enter a valid principal and profit balance");
+  const savePrincipalBalance = async (nextValue = Number(principalDraft)) => {
+    const nextPrincipalBalance = Number(nextValue);
+    if (!Number.isFinite(nextPrincipalBalance) || nextPrincipalBalance < 0) {
+      setError("Enter a valid principal balance");
       return;
     }
-    setSavingId(`pricing-${item._id}`);
+    setSavingId("principal-balance");
     setError("");
     try {
-      await apiFetch(`/api/menu/stock/${item._id}`, {
+      const result = await apiFetch(`/api/menu/cigarette-principal/${cafeId}`, {
         method: "PATCH",
         headers: { ...authHeaders() },
-        body: JSON.stringify({ cafeId, principalAmount, profitAmount }),
+        body: JSON.stringify({ principalBalance: nextPrincipalBalance }),
       });
-      await load();
-      setSuccess(`${item.name} pricing saved`);
+      const savedBalance = Number(result?.principalBalance || 0);
+      setPrincipalBalance(savedBalance);
+      setPrincipalDraft(String(savedBalance));
+      setSuccess(
+        nextPrincipalBalance === 0
+          ? "Cigarette principal reset to zero"
+          : "Cigarette principal saved"
+      );
     } catch (e) {
-      setError(e.message || "Failed to save stock");
+      setError(e.message || "Failed to save principal");
     } finally {
       setSavingId("");
     }
+  };
+
+  const resetPrincipalBalance = async () => {
+    setPrincipalDraft("0");
+    await savePrincipalBalance(0);
   };
 
   const createOrder = async () => {
@@ -304,6 +318,7 @@ export function CigarettePanel({
       } else {
         setOrders((prev) => filterCigaretteLiveOrders(upsertOrder(prev, updated)));
       }
+      if (status === "paid") await load();
     } catch (e) {
       setError(e.message || "Failed to update status");
     } finally {
@@ -311,22 +326,29 @@ export function CigarettePanel({
     }
   };
 
+  const isAdminVariant = variant === "admin";
+
   return (
-    <div id={id} className={`space-y-4 ${className}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div
+      id={id}
+      className={`space-y-4 ${className} ${isAdminVariant ? "rounded-3xl border border-amber-200 bg-amber-50/50 p-4 shadow-sm" : ""}`}
+    >
+      <div className={`flex flex-wrap items-center justify-between gap-3 ${isAdminVariant ? "rounded-2xl border border-amber-200 bg-white/80 px-3 py-2" : ""}`}>
         <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Cigarettes</h2>
-          <p className="text-sm text-slate-500">
-            Counter sales only — not available on the QR menu. Socket:{" "}
+          <h2 className={`text-lg font-bold ${isAdminVariant ? "text-amber-900" : "text-slate-900 dark:text-slate-100"}`}>
+            {isAdminVariant ? "Cigarette checkout" : "Cigarettes"}
+          </h2>
+          <p className={`text-sm ${isAdminVariant ? "text-amber-800" : "text-slate-500"}`}>
+            {isAdminVariant ? "Counter sales and live ticket status." : "Counter sales only — not available on the QR menu."} Socket:{" "}
             <span className="font-semibold">{socketState}</span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
+          <span className={`inline-flex items-center justify-center rounded-full border px-4 py-2 text-sm font-bold shadow-sm ${isAdminVariant ? "border-amber-200 bg-amber-100 text-amber-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
             {liveOrders.length} open
           </span>
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
-            INR {cigaretteItems.reduce((sum, item) => sum + remainingBalanceFor(item), 0).toFixed(2)} balance
+          <span className={`w-full rounded-full border px-5 py-2 text-center text-base font-bold tabular-nums shadow-sm sm:w-auto sm:text-lg ${isAdminVariant ? "border-orange-200 bg-orange-100 text-orange-900" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+            INR {principalBalance.toFixed(2)} balance
           </span>
           <Button type="button" variant="outline" onClick={load} disabled={loading || !cafeId}>
             Refresh
@@ -346,11 +368,36 @@ export function CigarettePanel({
       ) : null}
 
       {canCreate ? (
-        <div className="rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/60">
-          <div className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
-            Manual cigarette order
+        <div className={`rounded-3xl border p-4 shadow-sm ${isAdminVariant ? "border-amber-200 bg-white" : "border-slate-200 bg-white/90 dark:border-slate-800 dark:bg-slate-950/60"}`}>
+          <div className={`mb-3 text-sm font-semibold ${isAdminVariant ? "text-amber-900" : "text-slate-800 dark:text-slate-100"}`}>
+            {isAdminVariant ? "Checkout for orders" : "Manual cigarette order"}
           </div>
-          <p className="mb-4 text-sm text-slate-500">Choose cigarettes and adjust quantity for a walk-in customer.</p>
+          <p className={`mb-4 text-sm ${isAdminVariant ? "text-amber-800" : "text-slate-500"}`}>
+            {isAdminVariant ? "Create and manage walk-in cigarette sales from the counter." : "Choose cigarettes and adjust quantity for a walk-in customer."}
+          </p>
+          <div className={`mb-4 rounded-2xl border p-3 ${isAdminVariant ? "border-amber-200 bg-amber-50/70" : "border-amber-200 bg-amber-50/70"}`}>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <div className="text-sm font-bold text-amber-950">Shared cigarette principal</div>
+                <div className="mt-1 text-xs text-amber-800">Paid Advance cigarettes deduct ₹30 each; paid American cigarettes deduct ₹25 each.</div>
+              </div>
+              <div className="text-lg font-black tabular-nums text-amber-950">INR {principalBalance.toFixed(2)}</div>
+            </div>
+            {canManagePrincipal ? (
+              <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-amber-200 pt-3">
+                <label className="min-w-[12rem] flex-1 text-xs font-bold uppercase tracking-wide text-amber-900">
+                  Principal balance
+                  <Input aria-label="Shared cigarette principal balance" className="mt-1 bg-white" type="number" min="0" step="0.01" value={principalDraft} onChange={(e) => setPrincipalDraft(e.target.value)} />
+                </label>
+                <Button type="button" variant="outline" disabled={savingId === "principal-balance"} onClick={() => savePrincipalBalance(Number(principalDraft))}>
+                  {savingId === "principal-balance" ? "Saving..." : "Save principal"}
+                </Button>
+                <Button type="button" variant="outline" className="border-red-200 text-red-700" disabled={savingId === "principal-balance"} onClick={resetPrincipalBalance}>
+                  {savingId === "principal-balance" ? "Resetting..." : "Reset principal"}
+                </Button>
+              </div>
+            ) : null}
+          </div>
           <div className="mb-4 grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-slate-700 dark:text-slate-200">
@@ -382,46 +429,10 @@ export function CigarettePanel({
               <strong>Cigarettes</strong> (same spelling as on the menu card), then click Refresh.
             </div>
           ) : (
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.72fr)]">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-                {cigaretteItems.map((item) => (
-                <div
-                  key={item._id}
-                  className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-amber-50/40 px-3 py-3 dark:border-slate-800 dark:from-slate-900 dark:to-slate-950"
-                >
-                  <button type="button" onClick={() => addItemToDraft(item)} className="w-full text-left">
-                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.name}</div>
-                    <div className="mt-2 inline-flex max-w-full rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold leading-tight text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                      INR {principalBalanceFor(item).toFixed(2)} principal + INR {profitBalanceFor(item).toFixed(2)} profit = INR {remainingBalanceFor(item).toFixed(2)} remaining
-                    </div>
-                  </button>
-                  {draftQtyFor(item._id) > 0 ? (
-                    <div className="mt-2 flex items-center justify-between rounded-xl border border-amber-200 bg-white px-2 py-1">
-                      <button type="button" className="h-8 w-8 rounded-full border font-bold" onClick={() => setDraftQty(item._id, draftQtyFor(item._id) - 1)}>−</button>
-                      <span className="text-sm font-black">{draftQtyFor(item._id)} selected</span>
-                      <button type="button" className="h-8 w-8 rounded-full border font-bold" onClick={() => addItemToDraft(item)}>+</button>
-                    </div>
-                  ) : null}
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Principal balance
-                      <Input aria-label="Principal balance" className="mt-1" type="number" min="0" step="0.01" value={pricingDrafts[String(item._id)]?.principalAmount ?? principalBalanceFor(item)} onChange={(e) => setPricingDrafts((prev) => ({ ...prev, [String(item._id)]: { ...prev[String(item._id)], principalAmount: e.target.value } }))} />
-                    </label>
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Profit balance
-                      <Input aria-label="Profit balance" className="mt-1" type="number" min="0" step="0.01" value={pricingDrafts[String(item._id)]?.profitAmount ?? profitBalanceFor(item)} onChange={(e) => setPricingDrafts((prev) => ({ ...prev, [String(item._id)]: { ...prev[String(item._id)], profitAmount: e.target.value } }))} />
-                    </label>
-                  </div>
-                  <Button type="button" variant="outline" className="mt-2 w-full text-xs" disabled={savingId === `pricing-${item._id}`} onClick={() => savePricing(item)}>
-                    {savingId === `pricing-${item._id}` ? "Saving..." : "Save pricing"}
-                  </Button>
-                </div>
-                ))}
-              </div>
-              <div className="rounded-3xl border border-emerald-200 bg-emerald-50/50 p-3 dark:border-emerald-900 dark:bg-emerald-950/20">
+            <div className={`rounded-3xl border p-3 ${isAdminVariant ? "border-amber-200 bg-amber-50/60" : "border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/20"}`}>
                 <div className="mb-3">
-                  <div className="text-sm font-bold text-emerald-950 dark:text-emerald-100">Create customer order</div>
-                  <div className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">Add cigarettes using the cards below.</div>
+                  <div className={`text-sm font-bold ${isAdminVariant ? "text-amber-900" : "text-emerald-950 dark:text-emerald-100"}`}>Create customer order</div>
+                  <div className={`mt-1 text-xs ${isAdminVariant ? "text-amber-700" : "text-emerald-800 dark:text-emerald-300"}`}>Add cigarettes using the cards below.</div>
                 </div>
                 <div className="space-y-2">
                   {cigaretteItems.map((item) => {
@@ -447,7 +458,6 @@ export function CigarettePanel({
                     );
                   })}
                 </div>
-              </div>
             </div>
           )}
 

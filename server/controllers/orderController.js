@@ -200,22 +200,14 @@ function sumOrderLineSubtotal(items) {
 }
 
 async function decrementCigaretteBalances(cafeId, items) {
-  for (const line of Array.isArray(items) ? items : []) {
-    const quantity = Number(line?.qty || 0);
-    const amount = Number(line?.price || 0) * quantity;
-    if (!line?.menuItemId || quantity < 1 || amount <= 0) continue;
-
-    const menuItem = await MenuItem.findOne({ _id: line.menuItemId, cafeId })
-      .select("principalAmount profitAmount remainingAmount")
-      .lean();
-    if (!menuItem) continue;
-
-    const currentBalance = Number(menuItem.remainingAmount ?? (Number(menuItem.principalAmount || 0) + Number(menuItem.profitAmount || 0)));
-    await MenuItem.updateOne(
-      { _id: line.menuItemId, cafeId },
-      { $set: { remainingAmount: Number((currentBalance - amount).toFixed(2)) } }
-    );
-  }
+  const deduction = (Array.isArray(items) ? items : []).reduce((sum, line) => {
+    return sum + Number(line?.price || 0) * Number(line?.qty || 0);
+  }, 0);
+  if (deduction <= 0) return;
+  await Cafe.updateOne(
+    { _id: cafeId },
+    { $inc: { cigarettePrincipalBalance: -Number(deduction.toFixed(2)) } }
+  );
 }
 
 function cigaretteAccounting(items) {
@@ -929,6 +921,22 @@ exports.updateOrder = async (req, res) => {
 
     const prevOrderType =
       String(prev.orderType || "food").toLowerCase() === "cigarette" ? "cigarette" : "food";
+
+    if (Object.prototype.hasOwnProperty.call(update, "status")) {
+      const previousStatus = String(prev.status || "pending").toLowerCase();
+      const nextStatus = String(update.status || "").toLowerCase();
+      const normalizeProgressStatus = (value) => (value === "baking" ? "preparing" : value);
+      const progressStatuses = ["pending", "accepted", "preparing", "ready", "served", "paid"];
+      const previousIndex = progressStatuses.indexOf(normalizeProgressStatus(previousStatus));
+      const nextIndex = progressStatuses.indexOf(normalizeProgressStatus(nextStatus));
+
+      if (["paid", "rejected"].includes(previousStatus) && nextStatus !== previousStatus) {
+        return res.status(400).json({ message: "Paid or rejected orders cannot change status" });
+      }
+      if (nextStatus !== "rejected" && previousIndex !== -1 && nextIndex !== -1 && nextIndex < previousIndex) {
+        return res.status(400).json({ message: "Order status cannot move backwards" });
+      }
+    }
 
     if (Array.isArray(update.items)) {
       if (["paid", "rejected"].includes(String(prev.status || "").toLowerCase())) {

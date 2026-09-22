@@ -1495,7 +1495,7 @@ export default function KitchenPage() {
     >
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
             <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-br from-white to-orange-50/40 px-4 py-3 text-center shadow-sm ring-1 ring-orange-100/80">
               <div className="text-xl font-bold tabular-nums text-slate-900">
                 {stats.todayTotalOrders}
@@ -1743,7 +1743,7 @@ export default function KitchenPage() {
         ) : (
           <>
         {/* ── Category grid ── */}
-        <div className="grid min-w-0 items-start gap-6 overflow-x-hidden xl:grid-cols-[minmax(0,1.7fr)_minmax(24rem,0.75fr)]">
+        <div className="grid min-w-0 items-start gap-4 overflow-x-hidden sm:gap-6 2xl:items-stretch 2xl:grid-cols-[minmax(0,1.7fr)_minmax(24rem,0.75fr)]">
         <div className="min-w-0 max-w-full rounded-2xl border border-dashed border-orange-200/70 bg-white/55 p-3 shadow-sm backdrop-blur-sm sm:p-4 dark:border-white/[0.06] dark:bg-slate-900/40">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -1790,13 +1790,13 @@ export default function KitchenPage() {
                 placeholder="Search items by name, category, or description"
                 aria-label="Search quick order items"
               />
-              <div className="mt-3 max-h-[min(65vh,42rem)] overflow-y-auto pr-1 [scrollbar-width:thin]">
+              <div className="mt-3 max-h-[min(78vh,52rem)] overflow-y-auto pr-1 [scrollbar-width:thin]">
                 {menuLoading ? (
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                    {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-28 animate-pulse rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800/50" />)}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 2xl:grid-cols-3">
+                    {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-52 animate-pulse rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800/50" />)}
                   </div>
                 ) : quickOrderGridItems.length ? (
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 2xl:grid-cols-3">
                     {quickOrderGridItems.map((item) => {
                       const selectedQty = quickOrderDraft.items.find((line) => String(line.menuItemId) === String(item._id || item.menuItemId))?.qty;
                       return (
@@ -1804,15 +1804,15 @@ export default function KitchenPage() {
                           key={item._id || item.menuItemId}
                           type="button"
                           onClick={() => addQuickOrderItem(item._id || item.menuItemId)}
-                          className={`group flex min-h-[8.5rem] flex-col justify-between rounded-2xl border p-3 text-left shadow-sm transition active:scale-[0.98] ${selectedQty ? "border-orange-400 bg-orange-50 ring-1 ring-orange-200 dark:bg-orange-950/20" : "border-slate-200 bg-white hover:border-orange-300 hover:bg-orange-50/60 dark:border-slate-800 dark:bg-slate-900/80 dark:hover:border-orange-500/50"}`}
+                          className={`group flex min-h-52 flex-col justify-between rounded-2xl border p-5 text-left shadow-sm transition active:scale-[0.98] ${selectedQty ? "border-orange-400 bg-orange-50 ring-1 ring-orange-200 dark:bg-orange-950/20" : "border-slate-200 bg-white hover:border-orange-300 hover:bg-orange-50/60 dark:border-slate-800 dark:bg-slate-900/80 dark:hover:border-orange-500/50"}`}
                         >
                           <div>
-                            <div className="line-clamp-2 text-sm font-bold leading-snug text-slate-900 group-hover:text-orange-800 dark:text-slate-100 dark:group-hover:text-orange-300">{item.name}</div>
-                            <div className="mt-1 line-clamp-1 text-[11px] text-slate-500 dark:text-slate-400">{item.category || "Menu item"}</div>
+                            <div className="line-clamp-2 text-xl font-bold leading-snug text-slate-900 group-hover:text-orange-800 dark:text-slate-100 dark:group-hover:text-orange-300">{item.name}</div>
+                            <div className="mt-2 line-clamp-1 text-base text-slate-500 dark:text-slate-400">{item.category || "Menu item"}</div>
                           </div>
-                          <div className="mt-3 flex items-center justify-between gap-2">
-                            <span className="text-sm font-black tabular-nums text-orange-700 dark:text-orange-400">Rs {Number(item.price || 0).toFixed(0)}</span>
-                            <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-orange-500 px-2 text-xs font-black text-white">{selectedQty ? `×${selectedQty}` : "+"}</span>
+                          <div className="mt-5 flex items-center justify-between gap-3">
+                            <span className="text-xl font-black tabular-nums text-orange-700 dark:text-orange-400">Rs {Number(item.price || 0).toFixed(0)}</span>
+                            <span className="flex h-12 min-w-12 items-center justify-center rounded-full bg-orange-500 px-3 text-lg font-black text-white">{selectedQty ? `×${selectedQty}` : "+"}</span>
                           </div>
                         </button>
                       );
@@ -1922,7 +1922,7 @@ export default function KitchenPage() {
         ) : null}
 
         {quickOrderDraftItemsDetailed.length ? (
-          <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-white/95 p-4 shadow-lg shadow-slate-200/40 ring-1 ring-slate-100/80 backdrop-blur-sm dark:border-white/[0.06] dark:bg-slate-900/95 dark:ring-white/[0.04] xl:sticky xl:top-5">
+          <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-white/95 p-3 shadow-lg shadow-slate-200/40 ring-1 ring-slate-100/80 backdrop-blur-sm sm:p-4 dark:border-white/[0.06] dark:bg-slate-900/95 dark:ring-white/[0.04] 2xl:sticky 2xl:top-5 2xl:flex 2xl:max-h-[calc(100vh-2.5rem)] 2xl:flex-col">
             {quickOrderError && (
               <div
                 className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
@@ -1946,8 +1946,8 @@ export default function KitchenPage() {
               </div>
             </div>
 
-            <div className="mt-4 space-y-3">
-              <div className="space-y-3">
+            <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+              <div className="shrink-0 space-y-3">
                 <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Table number <span className="font-normal normal-case">(optional)</span>
                   <Input
@@ -1985,7 +1985,7 @@ export default function KitchenPage() {
                   />
                 </label>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800/80 dark:bg-slate-950/50">
+              <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800/80 dark:bg-slate-950/50">
                 <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-slate-800">
                   <div className="text-sm font-semibold text-slate-900 dark:text-slate-200">Selected items</div>
                   <button
@@ -1996,7 +1996,7 @@ export default function KitchenPage() {
                     Clear
                   </button>
                 </div>
-                <div className="mt-3 space-y-2">
+                <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin]">
                   {quickOrderDraftItemsDetailed.map((item) => (
                     <div
                       key={`${item.menuItemId}-${item.index}`}
@@ -2053,7 +2053,7 @@ export default function KitchenPage() {
               </div>
             </div>
 
-            <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-orange-100 bg-orange-50/70 px-4 py-3 dark:border-orange-500/20 dark:bg-orange-950/20">
+            <div className="mt-4 flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-orange-100 bg-orange-50/70 px-4 py-3 dark:border-orange-500/20 dark:bg-orange-950/20">
               <div className="text-sm text-slate-700 dark:text-slate-400">
                 <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Total</div>
                 <div className="font-bold text-slate-900 dark:text-slate-100">₹{quickOrderEstimate.total.toFixed(2)}</div>
@@ -2069,7 +2069,7 @@ export default function KitchenPage() {
             </div>
           </div>
         ) : (
-          <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-white/95 p-5 shadow-lg shadow-slate-200/40 ring-1 ring-slate-100/80 dark:border-white/[0.06] dark:bg-slate-900/95 dark:ring-white/[0.04] xl:sticky xl:top-5">
+          <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-white/95 p-4 shadow-lg shadow-slate-200/40 ring-1 ring-slate-100/80 sm:p-5 dark:border-white/[0.06] dark:bg-slate-900/95 dark:ring-white/[0.04] 2xl:sticky 2xl:top-5">
             <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
               <div>
                 <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Current order</div>
@@ -2845,6 +2845,7 @@ export default function KitchenPage() {
                           ? "preparing"
                           : normalizedOrderStatus),
                     );
+                    const nextStatusKey = statusSteps[activeStatusIndex + 1]?.key || "";
                     const canPrintChefBill = [
                       "accepted",
                       "preparing",
@@ -3099,7 +3100,7 @@ export default function KitchenPage() {
                                 size="sm"
                                 className={kitchenActionButtonClass("accepted")}
                                 onClick={() => setStatus(o._id, "accepted")}
-                                disabled={loading}
+                                disabled={loading || nextStatusKey !== "accepted"}
                                 aria-label="Mark order as accepted"
                               >
                                 Accept order
@@ -3111,7 +3112,7 @@ export default function KitchenPage() {
                                   "preparing",
                                 )}
                                 onClick={() => setStatus(o._id, "preparing")}
-                                disabled={loading}
+                                disabled={loading || nextStatusKey !== "preparing"}
                                 aria-label="Mark order as preparing"
                               >
                                 Start preparing
@@ -3121,7 +3122,7 @@ export default function KitchenPage() {
                                 size="sm"
                                 className={kitchenActionButtonClass("ready")}
                                 onClick={() => setStatus(o._id, "ready")}
-                                disabled={loading}
+                                disabled={loading || nextStatusKey !== "ready"}
                                 aria-label="Mark order as ready"
                               >
                                 Mark ready
@@ -3131,7 +3132,7 @@ export default function KitchenPage() {
                                 size="sm"
                                 className={kitchenActionButtonClass("served")}
                                 onClick={() => setStatus(o._id, "served")}
-                                disabled={loading}
+                                disabled={loading || nextStatusKey !== "served"}
                                 aria-label="Mark order as served"
                               >
                                 Mark served
