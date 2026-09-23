@@ -208,6 +208,7 @@ export default function KitchenPage() {
   const [quickOrderCategory, setQuickOrderCategory] = useState("All");
   const [quickOrderCategoryModal, setQuickOrderCategoryModal] = useState("");
   const [lastCreatedOrder, setLastCreatedOrder] = useState(null);
+  const [lastConfirmedQuickOrder, setLastConfirmedQuickOrder] = useState(null);
   const [editorMode, setEditorMode] = useState("create");
   const [editingOrderId, setEditingOrderId] = useState("");
   const [orderDraft, setOrderDraft] = useState(() => createEmptyOrderDraft());
@@ -843,6 +844,14 @@ export default function KitchenPage() {
   const addQuickOrderItem = (menuItemId) => {
     const resolvedMenuItemId = menuItemId ? String(menuItemId) : "";
     if (!resolvedMenuItemId) return;
+    if (lastConfirmedQuickOrder) {
+      setLastConfirmedQuickOrder(null);
+      setQuickOrderDraft({
+        ...createEmptyOrderDraft("pending"),
+        items: [{ menuItemId: resolvedMenuItemId, qty: 1 }],
+      });
+      return;
+    }
     setQuickOrderDraft((prev) => {
       const existingIndex = prev.items.findIndex((item) => String(item.menuItemId) === resolvedMenuItemId);
       if (existingIndex >= 0) {
@@ -861,6 +870,7 @@ export default function KitchenPage() {
   };
 
   const updateQuickOrderItem = (index, patch) => {
+    if (lastConfirmedQuickOrder) setLastConfirmedQuickOrder(null);
     setQuickOrderDraft((prev) => ({
       ...prev,
       items: prev.items.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)),
@@ -868,6 +878,7 @@ export default function KitchenPage() {
   };
 
   const removeQuickOrderItem = (index) => {
+    if (lastConfirmedQuickOrder) setLastConfirmedQuickOrder(null);
     setQuickOrderDraft((prev) => ({
       ...prev,
       items: prev.items.filter((_, itemIndex) => itemIndex !== index),
@@ -875,6 +886,7 @@ export default function KitchenPage() {
   };
 
   const clearQuickOrderDraft = () => {
+    setLastConfirmedQuickOrder(null);
     setQuickOrderDraft(createEmptyOrderDraft("pending"));
     setQuickOrderError("");
   };
@@ -912,14 +924,25 @@ export default function KitchenPage() {
   const printReceipt = (order, billType = "customer") => {
     if (!order) return;
     const isChefBill = billType === "chef";
-    const printBodyClass = isChefBill ? "chef-only" : "customer-only";
+    const isBoth = billType === "both";
+    const printBodyClass = isChefBill
+      ? "chef-only"
+      : isBoth
+      ? "sequential-print"
+      : "customer-only";
     const cafeName = cafeInfo?.name || "Coffee Culture";
     const cafeLogo = cafeInfo?.logoUrl || "";
     const taxRate = Number(cafeInfo?.taxPercent || 0);
     const discountType = cafeInfo?.discountType || "percent";
     const discountValue = Number(cafeInfo?.discountValue || 0);
 
-    const items = Array.isArray(order?.items) ? order.items : [];
+    const rawItems = Array.isArray(order?.items) ? order.items : [];
+    const items = rawItems.map((it) => {
+      const name = it.name || menuById?.get(String(it.menuItemId || it._id || ""))?.name || "Item";
+      const price = Number(it.price || menuById?.get(String(it.menuItemId || it._id || ""))?.price || 0);
+      const qty = Number(it.qty || 1);
+      return { ...it, name, price, qty };
+    });
     const tableLabel = Number(order?.tableNumber || 0) > 0 ? `Table ${order.tableNumber}` : "Walk-in";
     const orderIdShort = String(order?._id || "").slice(-6).toUpperCase();
     const orderId = String(order?._id || "").slice(-8).toUpperCase();
@@ -962,7 +985,7 @@ export default function KitchenPage() {
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>Receipt #${orderIdShort}</title>
+          <title>${isBoth ? `Print Bills #${orderIdShort}` : isChefBill ? `KOT #${orderIdShort}` : `Receipt #${orderIdShort}`}</title>
           <style>
             @page {
               size: 80mm auto;
@@ -990,6 +1013,12 @@ export default function KitchenPage() {
               width: 74mm;
               margin: 0 auto;
               padding: 2mm 0;
+            }
+
+            @media print {
+              .no-print {
+                display: none !important;
+              }
             }
 
             h1 {
@@ -1138,13 +1167,6 @@ export default function KitchenPage() {
               margin-top: 4px;
             }
 
-            .page-break {
-              page-break-before: always;
-              padding-top: 12px;
-              border-top: 2px dashed #111827;
-              margin-top: 20px;
-            }
-
             .kitchen-header {
               font-size: 18px;
               font-weight: bold;
@@ -1157,7 +1179,8 @@ export default function KitchenPage() {
               display: none;
             }
 
-            body.chef-only .kitchen-copy {
+            body.chef-only .kitchen-copy,
+            body.sequential-print .kitchen-copy {
               page-break-before: auto;
               margin-top: 0;
               padding-top: 2mm;
@@ -1166,8 +1189,56 @@ export default function KitchenPage() {
           </style>
         </head>
         <body class="${printBodyClass}">
+          ${isBoth ? `
+            <div class="no-print" style="position: sticky; top: 0; background: #0f172a; color: #fff; padding: 10px 14px; margin: -2mm -2mm 12px -2mm; border-radius: 8px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.18); z-index: 9999;">
+              <div>
+                <div style="font-weight: 800; font-size: 13px;" id="step-label">Step 1: Printing KOT...</div>
+                <div style="font-size: 11px; opacity: 0.8; margin-top: 2px;">Customer bill will print next automatically.</div>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <button id="btn-next" onclick="triggerCustomerPrint()" style="background: #ea580c; color: #fff; border: 0; padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;">Next: Customer Bill</button>
+              </div>
+            </div>
+          ` : ""}
+
+          <!-- ═══════════ KITCHEN COPY (KOT) ═══════════ -->
+          <section id="kot-section" class="kitchen-copy">
+            <div class="center">
+              <div class="kitchen-header">Kitchen Order (KOT)</div>
+              <span class="tag">Chef Copy</span>
+            </div>
+            <div class="meta">
+              <div>Order: #${orderIdShort}</div>
+              <div>Table: ${order.tableNumber || "Walk-in"}</div>
+              <div>Customer: ${String(order.customerName || "Guest")}</div>
+              <div>Phone: ${String(order.phone || "No phone number")}</div>
+              <div>Time: ${new Date().toLocaleTimeString()}</div>
+            </div>
+            <div class="divider"></div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="font-size: 12px; font-weight: bold; width: 80%;">Item</th>
+                  <th style="font-size: 12px; font-weight: bold; text-align: right; width: 20%;">Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${kitchenRowsHtml}
+              </tbody>
+            </table>
+            <div class="divider"></div>
+            ${orderNote ? `
+              <div class="note-box">
+                <div class="note-title">Order note</div>
+                <div class="note-text">${orderNote}</div>
+              </div>
+              <div class="divider"></div>
+            ` : ""}
+            <div class="center" style="font-size:10px; margin-top: 6px;">— Prepare promptly —</div>
+          </section>
+
           <!-- ═══════════ CUSTOMER COPY ═══════════ -->
-          <section class="customer-copy">
+          <section id="customer-section" class="customer-copy" ${isBoth ? 'style="display: none;"' : ""}>
           ${cafeLogo ? `<img class="logo" src="${cafeLogo}" alt="Cafe logo" />` : ""}
           <div class="cafe-name">${cafeName}</div>
           <h1>Final Bill</h1>
@@ -1223,44 +1294,74 @@ export default function KitchenPage() {
             <div>Status: ${String(order.status || "pending").toUpperCase()}</div>
             <div>Thank you for visiting!</div>
           </div>
-
           </section>
 
-          <!-- ═══════════ KITCHEN COPY ═══════════ -->
-          <section class="kitchen-copy page-break">
-            <div class="center">
-              <div class="kitchen-header">Kitchen Order</div>
-              <span class="tag">Chef Copy</span>
-            </div>
-            <div class="meta">
-              <div>Order: #${orderIdShort}</div>
-              <div>Table: ${order.tableNumber || "Walk-in"}</div>
-              <div>Customer: ${String(order.customerName || "Guest")}</div>
-              <div>Phone: ${String(order.phone || "No phone number")}</div>
-              <div>Time: ${new Date().toLocaleTimeString()}</div>
-            </div>
-            <div class="divider"></div>
-            <table>
-              <thead>
-                <tr>
-                  <th style="font-size: 12px; font-weight: bold; width: 80%;">Item</th>
-                  <th style="font-size: 12px; font-weight: bold; text-align: right; width: 20%;">Qty</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${kitchenRowsHtml}
-              </tbody>
-            </table>
-            <div class="divider"></div>
-            <div class="center" style="font-size:10px; margin-top: 6px;">— Prepare promptly —</div>
-          </section>
+          ${isBoth ? `
+          <script>
+            var currentStep = 1;
 
+            function triggerKotPrint() {
+              currentStep = 1;
+              document.title = "KOT #${orderIdShort}";
+              var kotEl = document.getElementById("kot-section");
+              var custEl = document.getElementById("customer-section");
+              var labelEl = document.getElementById("step-label");
+              var btnNext = document.getElementById("btn-next");
+              if (kotEl) kotEl.style.display = "block";
+              if (custEl) custEl.style.display = "none";
+              if (labelEl) labelEl.textContent = "Step 1 of 2: Printing KOT...";
+              if (btnNext) {
+                btnNext.textContent = "Next: Customer Bill";
+                btnNext.onclick = triggerCustomerPrint;
+              }
+              setTimeout(function() {
+                window.print();
+              }, 200);
+            }
+
+            function triggerCustomerPrint() {
+              currentStep = 2;
+              document.title = "Final Bill #${orderIdShort}";
+              var kotEl = document.getElementById("kot-section");
+              var custEl = document.getElementById("customer-section");
+              var labelEl = document.getElementById("step-label");
+              var btnNext = document.getElementById("btn-next");
+              if (kotEl) kotEl.style.display = "none";
+              if (custEl) custEl.style.display = "block";
+              if (labelEl) labelEl.textContent = "Step 2 of 2: Printing Customer Bill...";
+              if (btnNext) {
+                btnNext.textContent = "Close";
+                btnNext.onclick = function() { window.close(); };
+              }
+              setTimeout(function() {
+                window.print();
+              }, 300);
+            }
+
+            window.onafterprint = function() {
+              if (currentStep === 1) {
+                setTimeout(function() {
+                  triggerCustomerPrint();
+                }, 400);
+              } else if (currentStep === 2) {
+                setTimeout(function() {
+                  window.close();
+                }, 500);
+              }
+            };
+
+            window.onload = function() {
+              triggerKotPrint();
+            };
+          <\/script>
+          ` : `
           <script>
             window.onload = function() {
               window.print();
               setTimeout(function() { window.close(); }, 800);
             };
           <\/script>
+          `}
         </body>
       </html>
     `;
@@ -1456,7 +1557,7 @@ export default function KitchenPage() {
       }
       // Store the completed order so chef can print the bill
       setLastCreatedOrder(updated);
-      clearQuickOrderDraft();
+      setLastConfirmedQuickOrder(updated);
     } catch (e) {
       setQuickOrderError(e.message || "Failed to create quick order");
     } finally {
@@ -1950,6 +2051,18 @@ export default function KitchenPage() {
               </div>
             </div>
 
+            {lastConfirmedQuickOrder && (
+              <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-900 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
+                <span className="flex items-center gap-1.5">
+                  <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Order #{String(lastConfirmedQuickOrder._id || "").slice(-6).toUpperCase()} Confirmed!
+                </span>
+                <span className="text-[11px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                  Ready to print
+                </span>
+              </div>
+            )}
+
             <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
               <div className="shrink-0 space-y-3">
                 <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -1957,7 +2070,10 @@ export default function KitchenPage() {
                   <Input
                     className="mt-1.5"
                     value={quickOrderDraft.tableNumber}
-                    onChange={(e) => setQuickOrderDraft((prev) => ({ ...prev, tableNumber: e.target.value }))}
+                    onChange={(e) => {
+                      if (lastConfirmedQuickOrder) setLastConfirmedQuickOrder(null);
+                      setQuickOrderDraft((prev) => ({ ...prev, tableNumber: e.target.value }));
+                    }}
                     placeholder="Table number"
                     type="number"
                     min="1"
@@ -1968,7 +2084,10 @@ export default function KitchenPage() {
                   <Input
                     className="mt-1.5"
                     value={quickOrderDraft.customerName}
-                    onChange={(e) => setQuickOrderDraft((prev) => ({ ...prev, customerName: e.target.value }))}
+                    onChange={(e) => {
+                      if (lastConfirmedQuickOrder) setLastConfirmedQuickOrder(null);
+                      setQuickOrderDraft((prev) => ({ ...prev, customerName: e.target.value }));
+                    }}
                     placeholder="Customer name"
                     required
                   />
@@ -1978,7 +2097,10 @@ export default function KitchenPage() {
                   <Input
                     className="mt-1.5"
                     value={quickOrderDraft.phone}
-                    onChange={(e) => setQuickOrderDraft((prev) => ({ ...prev, phone: sanitizePhoneInput(e.target.value) }))}
+                    onChange={(e) => {
+                      if (lastConfirmedQuickOrder) setLastConfirmedQuickOrder(null);
+                      setQuickOrderDraft((prev) => ({ ...prev, phone: sanitizePhoneInput(e.target.value) }));
+                    }}
                     placeholder="Phone number"
                     type="tel"
                     inputMode="numeric"
@@ -2063,12 +2185,42 @@ export default function KitchenPage() {
                 <div className="font-bold text-slate-900 dark:text-slate-100">₹{quickOrderEstimate.total.toFixed(2)}</div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={submitQuickOrderPreview} disabled={editorSaving || !quickOrderDraftItemsDetailed.length}>
-                  {editorSaving ? "Saving..." : "Confirm"}
-                </Button>
-                <Button type="button" variant="outline" onClick={clearQuickOrderDraft} disabled={editorSaving}>
-                  Clear
-                </Button>
+                {lastConfirmedQuickOrder ? (
+                  <>
+                    <Button
+                      type="button"
+                      onClick={() => printReceipt(lastConfirmedQuickOrder, "both")}
+                      iconLeft={<Printer className="h-4 w-4" />}
+                    >
+                      Print Bill
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={clearQuickOrderDraft}
+                    >
+                      New Order
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      onClick={submitQuickOrderPreview}
+                      disabled={editorSaving || !quickOrderDraftItemsDetailed.length}
+                    >
+                      {editorSaving ? "Saving..." : "Confirm"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={clearQuickOrderDraft}
+                      disabled={editorSaving}
+                    >
+                      Clear
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -2858,7 +3010,7 @@ export default function KitchenPage() {
                 </div>
               </div>
               <div className="max-h-[calc(90vh-124px)] overflow-y-auto p-3 sm:p-4">
-                <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3">
                   {selectedGroup.orders.map((o, index) => {
                     const orderPalette = getOrderStatusPalette(o.status);
                     const normalizedOrderStatus = String(o?.status || "")
