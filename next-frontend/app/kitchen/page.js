@@ -213,6 +213,8 @@ export default function KitchenPage() {
   const [editingOrderId, setEditingOrderId] = useState("");
   const [orderDraft, setOrderDraft] = useState(() => createEmptyOrderDraft());
   const [quickOrderDraft, setQuickOrderDraft] = useState(() => createEmptyOrderDraft());
+  const [customerSuggestions, setCustomerSuggestions] = useState([]);
+  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
   const [quickOrderItemSearch, setQuickOrderItemSearch] = useState("");
   const [customerNotes, setCustomerNotes] = useState([]);
   const [noteDraft, setNoteDraft] = useState({ customerName: "", phone: "", amountDue: "", note: "" });
@@ -885,6 +887,34 @@ export default function KitchenPage() {
     }));
   };
 
+  useEffect(() => {
+    const query = String(quickOrderDraft.customerName || "").trim();
+    if (!cafeId || query.length < 2) {
+      setCustomerSuggestions([]);
+      setCustomerSearchLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setCustomerSearchLoading(true);
+      try {
+        const params = new URLSearchParams({ cafeId, q: query });
+        const data = await apiFetch(`/api/customers/search?${params.toString()}`, {
+          headers: { ...(token ? authHeaders() : {}) },
+        });
+        if (!cancelled) setCustomerSuggestions(Array.isArray(data?.customers) ? data.customers : []);
+      } catch {
+        if (!cancelled) setCustomerSuggestions([]);
+      } finally {
+        if (!cancelled) setCustomerSearchLoading(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [cafeId, quickOrderDraft.customerName, token]);
+
   const clearQuickOrderDraft = () => {
     setLastConfirmedQuickOrder(null);
     setQuickOrderDraft(createEmptyOrderDraft("pending"));
@@ -922,7 +952,7 @@ export default function KitchenPage() {
   };
 
   const printReceipt = (order, billType = "customer") => {
-    if (!order) return;
+    if (!order) return false;
     const isChefBill = billType === "chef";
     const isBoth = billType === "both";
     const printBodyClass = isChefBill
@@ -1369,11 +1399,12 @@ export default function KitchenPage() {
     const w = window.open("", "_blank", "width=420,height=680,scrollbars=yes");
     if (!w) {
       alert("Pop-up blocked! Please allow pop-ups for this site and try again.");
-      return;
+      return false;
     }
     w.document.open();
     w.document.write(html);
     w.document.close();
+    return true;
   };
 
   const buildOrderPayloadFromDraft = (draft) => {
@@ -2096,6 +2127,30 @@ export default function KitchenPage() {
                     placeholder="Customer name"
                     required
                   />
+                  {(customerSearchLoading || customerSuggestions.length > 0) && (
+                    <div className="relative z-30">
+                      <div className="absolute inset-x-0 top-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                        {customerSearchLoading ? (
+                          <div className="px-3 py-2 text-xs text-slate-500">Searching customers...</div>
+                        ) : (
+                          customerSuggestions.map((customer) => (
+                            <button
+                              key={customer.id}
+                              type="button"
+                              className="block w-full border-b border-slate-100 px-3 py-2 text-left last:border-0 hover:bg-orange-50 dark:border-slate-800 dark:hover:bg-slate-800"
+                              onClick={() => {
+                                setQuickOrderDraft((prev) => ({ ...prev, customerName: customer.name || "", phone: customer.phone || prev.phone }));
+                                setCustomerSuggestions([]);
+                              }}
+                            >
+                              <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{customer.name}</div>
+                              <div className="text-xs text-slate-500">{customer.phone}</div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </label>
                 <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Phone number <span className="text-red-600">*</span>
@@ -2194,7 +2249,10 @@ export default function KitchenPage() {
                   <>
                     <Button
                       type="button"
-                      onClick={() => printReceipt(lastConfirmedQuickOrder, "both")}
+                      onClick={() => {
+                        const printed = printReceipt(lastConfirmedQuickOrder, "both");
+                        if (printed) clearQuickOrderDraft();
+                      }}
                       iconLeft={<Printer className="h-4 w-4" />}
                     >
                       Print Bill

@@ -112,6 +112,67 @@ exports.getFavorites = async (req, res) => {
   }
 };
 
+exports.searchCustomers = async (req, res) => {
+  try {
+    const requestedCafeId = String(req.query.cafeId || "").trim();
+    const cafeId = req.user?.role === "super_admin" ? requestedCafeId : String(req.user?.cafeId || "");
+    const query = String(req.query.q || "").trim();
+    if (!cafeId || !mongoose.Types.ObjectId.isValid(cafeId)) {
+      return res.status(400).json({ message: "cafeId query parameter is required" });
+    }
+    if (req.user?.role !== "super_admin" && cafeId !== String(req.user?.cafeId || "")) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    if (query.length < 2) return res.json({ customers: [] });
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(escaped, "i");
+    const [customers, orderCustomers] = await Promise.all([
+      Customer.find({
+        lastCafeId: new mongoose.Types.ObjectId(cafeId),
+        $or: [{ name: pattern }, { phone: pattern }],
+      })
+        .select("_id name phone updatedAt")
+        .sort({ updatedAt: -1 })
+        .limit(8)
+        .lean(),
+      Order.aggregate([
+        { $match: {
+          cafeId: new mongoose.Types.ObjectId(cafeId),
+          phone: { $nin: ["", null] },
+          $or: [{ customerName: pattern }, { phone: pattern }],
+        } },
+        { $sort: { updatedAt: -1, createdAt: -1 } },
+        { $group: {
+          _id: "$phone",
+          name: { $first: "$customerName" },
+          phone: { $first: "$phone" },
+          updatedAt: { $first: "$updatedAt" },
+        } },
+        { $sort: { updatedAt: -1 } },
+        { $limit: 8 },
+      ]),
+    ]);
+    const seenPhones = new Set();
+    const suggestions = [...customers.map((customer) => ({
+      id: String(customer._id),
+      name: customer.name,
+      phone: customer.phone,
+    })), ...orderCustomers.map((customer) => ({
+      id: `order-${customer.phone}`,
+      name: customer.name,
+      phone: customer.phone,
+    }))].filter((customer) => {
+      const phone = String(customer.phone || "");
+      if (!phone || seenPhones.has(phone)) return false;
+      seenPhones.add(phone);
+      return Boolean(customer.name);
+    }).slice(0, 8);
+    return res.json({ customers: suggestions });
+  } catch (e) {
+    return res.status(500).json({ message: "Failed to search customers" });
+  }
+};
+
 exports.getMe = async (req, res) => {
   try {
     const current = await loadCurrentCustomer(req);
