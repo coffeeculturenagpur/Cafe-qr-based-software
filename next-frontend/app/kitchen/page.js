@@ -1379,10 +1379,14 @@ export default function KitchenPage() {
   const buildOrderPayloadFromDraft = (draft) => {
     const rawTableNumber = String(draft.tableNumber || "").trim();
     const parsedTableNumber = rawTableNumber ? Number(rawTableNumber) : null;
+    const maxTableNumber = Number(cafeInfo?.numberOfTables || 0);
     const customerName = String(draft.customerName || "").trim();
     const phone = String(draft.phone || "").trim();
-    if (rawTableNumber && (!parsedTableNumber || parsedTableNumber < 1)) {
-      return { error: "Table number must be 1 or more" };
+    if (rawTableNumber && (!Number.isInteger(parsedTableNumber) || parsedTableNumber < 1)) {
+      return { error: "Table number must be a whole number starting at 1" };
+    }
+    if (rawTableNumber && (!maxTableNumber || parsedTableNumber > maxTableNumber)) {
+      return { error: `Table number must be between 1 and ${maxTableNumber || 0}` };
     }
     if (!customerName) {
       return { error: "Customer name is required for a manual order" };
@@ -2077,6 +2081,7 @@ export default function KitchenPage() {
                     placeholder="Table number"
                     type="number"
                     min="1"
+                    max={cafeInfo?.numberOfTables || undefined}
                   />
                 </label>
                 <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -3443,6 +3448,7 @@ export default function KitchenPage() {
                     placeholder="Table number"
                     type="number"
                     min="1"
+                    max={cafeInfo?.numberOfTables || undefined}
                   />
                   <Input
                     value={orderDraft.customerName}

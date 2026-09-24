@@ -42,6 +42,22 @@ function normalizePaymentMode(value, fallback = "cash") {
   return paymentValue;
 }
 
+function validateTableNumberForCafe(tableNumber, cafe) {
+  const parsed = Number(tableNumber);
+  const tableCount = Number(cafe?.numberOfTables || 0);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    const error = new Error("tableNumber must be a whole number starting at 1");
+    error.status = 400;
+    throw error;
+  }
+  if (!tableCount || parsed > tableCount) {
+    const error = new Error("tableNumber must be between 1 and " + (tableCount || 0));
+    error.status = 400;
+    throw error;
+  }
+  return parsed;
+}
+
 function getCigaretteSalePrice(menuItem) {
   const name = String(menuItem?.name || "").trim().toLowerCase();
   if (name === "advance") return 30;
@@ -358,8 +374,13 @@ exports.createOrder = async (req, res) => {
         });
       }
     }
-    if (!tableNumber) return res.status(400).json({ message: "tableNumber is required" });
-    if (!verifyTableToken(cafeId, tableNumber, tableToken)) {
+    let parsedTableNumber;
+    try {
+      parsedTableNumber = validateTableNumberForCafe(tableNumber, cafe);
+    } catch (error) {
+      return res.status(error.status || 400).json({ message: error.message });
+    }
+    if (!verifyTableToken(cafeId, parsedTableNumber, tableToken)) {
       return res.status(403).json({ message: "Invalid table token" });
     }
     if (!customerName) return res.status(400).json({ message: "customerName is required" });
@@ -376,7 +397,7 @@ exports.createOrder = async (req, res) => {
     const linkedCustomer = await upsertCustomerFromOrder({
       phone: normalizedPhone,
       name: customerName,
-      tableNumber,
+      tableNumber: parsedTableNumber,
       cafeId,
     });
 
@@ -396,7 +417,7 @@ exports.createOrder = async (req, res) => {
     const paymentValue = normalizePaymentMode(paymentMode, "cash");
     const activeOrder = await findActiveOrderForMerge({
       cafeId,
-      tableNumber,
+      tableNumber: parsedTableNumber,
       sessionId,
       customerId: linkedCustomer?._id || null,
       visitId: visit,
@@ -441,7 +462,7 @@ exports.createOrder = async (req, res) => {
       const { subtotalAmount, discountAmount, taxAmount, totalAmount } = computeOrderTotals(cafe, lineSubtotal);
       order = await Order.create({
         cafeId,
-        tableNumber,
+        tableNumber: parsedTableNumber,
         visitId: visit,
         sessionId,
         customerId: linkedCustomer?._id || null,
@@ -461,7 +482,7 @@ exports.createOrder = async (req, res) => {
     }
 
     await Table.findOneAndUpdate(
-      { cafeId, tableNumber },
+      { cafeId, tableNumber: parsedTableNumber },
       { $set: { status: "reserved" } }
     );
 
@@ -745,6 +766,14 @@ exports.createStaffOrder = async (req, res) => {
     const { cafe, resolvedItems, menuMap, cigaretteCategorySet, subtotalAmount, discountAmount, taxAmount, totalAmount, principalAmount, profitAmount } =
       await buildResolvedOrderPayload(cafeId, req.body?.items, { allowUnavailable: true });
 
+    if (tableNumber !== null) {
+      try {
+        validateTableNumberForCafe(tableNumber, cafe);
+      } catch (error) {
+        return res.status(error.status || 400).json({ message: error.message });
+      }
+    }
+
     if (cafe.isActive === false) {
       return res.status(403).json({ message: "This cafe is not accepting orders" });
     }
@@ -895,6 +924,14 @@ exports.updateOrder = async (req, res) => {
         : Number(rawTableNumber);
       if (nextTableNumber !== null && (!nextTableNumber || nextTableNumber < 1)) {
         return res.status(400).json({ message: "tableNumber must be >= 1" });
+      }
+      if (nextTableNumber !== null) {
+        const cafe = await Cafe.findById(prev.cafeId).lean();
+        try {
+          validateTableNumberForCafe(nextTableNumber, cafe);
+        } catch (error) {
+          return res.status(error.status || 400).json({ message: error.message });
+        }
       }
       update.tableNumber = nextTableNumber;
     }
