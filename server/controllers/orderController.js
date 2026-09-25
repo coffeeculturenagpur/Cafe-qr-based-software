@@ -802,6 +802,10 @@ exports.createStaffOrder = async (req, res) => {
       }
     }
 
+    const linkedCustomer = orderType === "food"
+      ? await upsertCustomerFromOrder({ phone, name: customerName, tableNumber, cafeId })
+      : null;
+
     if (orderType === "cigarette" && !allCigarette) {
       return res.status(400).json({ message: "Cigarette orders may only include cigarette menu items" });
     }
@@ -815,33 +819,34 @@ exports.createStaffOrder = async (req, res) => {
     let order;
     try {
       order = await Order.create({
-      cafeId,
-      tableNumber,
-      visitId: "",
-      customerName,
-      phone,
-      notes,
-      items: resolvedItems,
-      subtotalAmount,
-      discountAmount,
-      taxAmount,
-      totalAmount,
-      principalAmount,
-      profitAmount,
-      paymentMode: normalizePaymentMode(req.body?.paymentMode, "cash"),
-      source: "manual",
-      orderType,
-      status,
-      ...(status === "accepted"
-        ? { acceptedAt: new Date(), servedAt: null, acceptToServeMs: null }
-        : {}),
-      ...(status === "served"
-        ? {
+        cafeId,
+        tableNumber,
+        visitId: "",
+        customerId: linkedCustomer?._id || null,
+        customerName,
+        phone,
+        notes,
+        items: resolvedItems,
+        subtotalAmount,
+        discountAmount,
+        taxAmount,
+        totalAmount,
+        principalAmount,
+        profitAmount,
+        paymentMode: normalizePaymentMode(req.body?.paymentMode, "cash"),
+        source: "manual",
+        orderType,
+        status,
+        ...(status === "accepted"
+          ? { acceptedAt: new Date(), servedAt: null, acceptToServeMs: null }
+          : {}),
+        ...(status === "served"
+          ? {
             acceptedAt: new Date(),
             servedAt: new Date(),
             acceptToServeMs: 0,
           }
-        : {}),
+          : {}),
       });
     } catch (error) {
       throw error;

@@ -34,6 +34,53 @@ function getCustomerCookieOptions(req) {
   };
 }
 
+function escapeRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Customer names previously used at this staff member's cafe. */
+exports.searchStaffCustomers = async (req, res) => {
+  try {
+    const cafeId = req.user?.cafeId;
+    const query = String(req.query?.q || "").trim();
+    if (!cafeId) return res.status(400).json({ message: "cafeId is required" });
+    if (!query) return res.json([]);
+
+    const nameRegex = { $regex: escapeRegex(query), $options: "i" };
+    // The cafe's orders are the source of truth for which customers belong to
+    // this cafe, including customers created before the customer lookup existed.
+    const orders = await Order.find({
+      cafeId: new mongoose.Types.ObjectId(cafeId),
+      customerName: nameRegex,
+      phone: { $exists: true, $nin: ["", null] },
+    })
+      .select("customerName phone createdAt")
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+
+    const seen = new Set();
+    const suggestions = [];
+    const candidates = orders.map((order) => ({
+      name: order?.customerName,
+      phone: order?.phone,
+    }));
+    for (const candidate of candidates) {
+      const name = String(candidate?.name || "").trim();
+      const phone = String(candidate?.phone || "").trim();
+      const key = `${name.toLowerCase()}\u0000${phone}`;
+      if (!name || !phone || seen.has(key)) continue;
+      seen.add(key);
+      suggestions.push({ name, phone });
+      if (suggestions.length >= 8) break;
+    }
+
+    return res.json(suggestions);
+  } catch (error) {
+    return res.status(500).json({ message: error.message || "Failed to search customer history" });
+  }
+};
+
 async function loadCurrentCustomer(req) {
   const token = req.cookies?.[CUSTOMER_COOKIE_NAME];
   if (!token) return { status: 401, message: "Not signed in" };
