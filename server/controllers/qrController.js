@@ -4,6 +4,7 @@ const { URL } = require("url");
 const QRCode = require("qrcode");
 const sharp = require("sharp");
 const Cafe = require("../models/Cafe");
+const Table = require("../models/Table");
 const { signTableToken, verifyTableToken } = require("../utils/tableToken");
 const { upsertSessionState, getSessionStoreMode } = require("../services/sessionStore");
 
@@ -11,11 +12,21 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-function validateTableNumberForCafe(tableNumber, cafe) {
+async function validateTableNumberForCafe(tableNumber, cafe) {
   const parsed = Number(tableNumber);
-  const tableCount = Number(cafe?.numberOfTables || 0);
-  if (!Number.isInteger(parsed) || parsed < 1 || !tableCount || parsed > tableCount) {
-    const error = new Error("tableNumber must be between 1 and " + (tableCount || 0));
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    const error = new Error("tableNumber must be a whole number starting at 1");
+    error.status = 400;
+    throw error;
+  }
+
+  const table = await Table.findOne({
+    cafeId: cafe?._id,
+    tableNumber: parsed,
+    isActive: true,
+  }).lean();
+  if (!table) {
+    const error = new Error("tableNumber does not refer to an active table");
     error.status = 400;
     throw error;
   }
@@ -75,7 +86,7 @@ exports.tableQr = async (req, res) => {
     const cafe = await Cafe.findById(cafeId).lean();
     if (!cafe) return res.status(404).json({ message: "Cafe not found" });
 
-    try { num = validateTableNumberForCafe(tableNumber, cafe); } catch (error) { return res.status(error.status || 400).json({ message: error.message }); }
+    try { num = await validateTableNumberForCafe(tableNumber, cafe); } catch (error) { return res.status(error.status || 400).json({ message: error.message }); }
     const qrSize = clamp(Number(size || 260), 120, 1024);
     const origin = String(baseUrl || req.get("origin") || process.env.CUSTOMER_BASE_URL || "").trim();
     if (!origin) return res.status(400).json({ message: "baseUrl is required" });
@@ -149,7 +160,7 @@ exports.verifyTableToken = async (req, res) => {
     const cafe = await Cafe.findById(cafeId).lean();
     if (!cafe) return res.status(404).json({ message: "Cafe not found" });
     let validTable;
-    try { validTable = validateTableNumberForCafe(tableNumber, cafe); } catch (error) { return res.status(error.status || 400).json({ message: error.message }); }
+    try { validTable = await validateTableNumberForCafe(tableNumber, cafe); } catch (error) { return res.status(error.status || 400).json({ message: error.message }); }
     const ok = verifyTableToken(cafeId, validTable, t);
     if (!ok) return res.status(400).json({ message: "Invalid table token" });
 
@@ -174,7 +185,7 @@ exports.tableToken = async (req, res) => {
 
     const cafe = await Cafe.findById(cafeId).lean();
     if (!cafe) return res.status(404).json({ message: "Cafe not found" });
-    try { num = validateTableNumberForCafe(tableNumber, cafe); } catch (error) { return res.status(error.status || 400).json({ message: error.message }); }
+    try { num = await validateTableNumberForCafe(tableNumber, cafe); } catch (error) { return res.status(error.status || 400).json({ message: error.message }); }
 
     return res.json({ token: signTableToken(cafeId, num) });
   } catch (error) {

@@ -42,16 +42,21 @@ function normalizePaymentMode(value, fallback = "cash") {
   return paymentValue;
 }
 
-function validateTableNumberForCafe(tableNumber, cafe) {
+async function validateTableNumberForCafe(tableNumber, cafe) {
   const parsed = Number(tableNumber);
-  const tableCount = Number(cafe?.numberOfTables || 0);
   if (!Number.isInteger(parsed) || parsed < 1) {
     const error = new Error("tableNumber must be a whole number starting at 1");
     error.status = 400;
     throw error;
   }
-  if (!tableCount || parsed > tableCount) {
-    const error = new Error("tableNumber must be between 1 and " + (tableCount || 0));
+
+  const table = await Table.findOne({
+    cafeId: cafe?._id,
+    tableNumber: parsed,
+    isActive: true,
+  }).lean();
+  if (!table) {
+    const error = new Error("tableNumber does not refer to an active table");
     error.status = 400;
     throw error;
   }
@@ -376,7 +381,7 @@ exports.createOrder = async (req, res) => {
     }
     let parsedTableNumber;
     try {
-      parsedTableNumber = validateTableNumberForCafe(tableNumber, cafe);
+      parsedTableNumber = await validateTableNumberForCafe(tableNumber, cafe);
     } catch (error) {
       return res.status(error.status || 400).json({ message: error.message });
     }
@@ -768,7 +773,7 @@ exports.createStaffOrder = async (req, res) => {
 
     if (tableNumber !== null) {
       try {
-        validateTableNumberForCafe(tableNumber, cafe);
+        await validateTableNumberForCafe(tableNumber, cafe);
       } catch (error) {
         return res.status(error.status || 400).json({ message: error.message });
       }
@@ -933,7 +938,7 @@ exports.updateOrder = async (req, res) => {
       if (nextTableNumber !== null) {
         const cafe = await Cafe.findById(prev.cafeId).lean();
         try {
-          validateTableNumberForCafe(nextTableNumber, cafe);
+          await validateTableNumberForCafe(nextTableNumber, cafe);
         } catch (error) {
           return res.status(error.status || 400).json({ message: error.message });
         }
