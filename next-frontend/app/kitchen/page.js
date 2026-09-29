@@ -44,6 +44,7 @@ import {
   canonicalizeQuickOrderCategory,
   resolveQuickOrderCategories,
 } from "../../lib/quickOrderCategories";
+import { isCigaretteMenuItem } from "../../lib/cigaretteMenu";
 
 function formatKitchenPhone(phone) {
   const s = String(phone || "").trim();
@@ -197,6 +198,7 @@ export default function KitchenPage() {
   const [cafeInfo, setCafeInfo] = useState(null);
   const [alertMsg, setAlertMsg] = useState("");
   const [menuItems, setMenuItems] = useState([]);
+  const [cigarettePrincipalBalance, setCigarettePrincipalBalance] = useState(null);
   const [popularMenuItems, setPopularMenuItems] = useState([]);
   const [menuLoading, setMenuLoading] = useState(false);
   const [menuError, setMenuError] = useState("");
@@ -627,7 +629,7 @@ export default function KitchenPage() {
       setMenuError("");
       try {
         const qs = ordersBusinessDayQueryString({ startHour: 1 });
-        const [liveList, todayList, cafeData, menuData, popularItemsData] =
+        const [liveList, todayList, cafeData, menuData, popularItemsData, cigarettePrincipal] =
           await Promise.all([
             // Use server-time scoped query so the reset is independent of device clock.
             apiFetch(`/api/orders/${cafeId}?scope=kitchen_live`, {
@@ -646,6 +648,9 @@ export default function KitchenPage() {
             apiFetch(`/api/orders/${cafeId}/popular-items`, {
               headers: { ...(token ? authHeaders() : {}) },
             }).catch(() => []),
+            apiFetch(`/api/menu/cigarette-principal/${cafeId}`, {
+              headers: { ...(token ? authHeaders() : {}) },
+            }).catch(() => null),
           ]);
         const normalizedLiveList = Array.isArray(liveList) ? liveList : [];
         const normalizedTodayList = Array.isArray(todayList) ? todayList : [];
@@ -653,6 +658,11 @@ export default function KitchenPage() {
         setOrders(filterKitchenLiveOrders(normalizedLiveList));
         setCafeInfo(cafeData || null);
         setMenuItems(Array.isArray(menuData) ? menuData : []);
+        setCigarettePrincipalBalance(
+          cigarettePrincipal && Number.isFinite(Number(cigarettePrincipal.principalBalance))
+            ? Number(cigarettePrincipal.principalBalance)
+            : null,
+        );
         setPopularMenuItems(
           Array.isArray(popularItemsData) ? popularItemsData : [],
         );
@@ -741,6 +751,13 @@ export default function KitchenPage() {
     const merge = (order) => {
       const orderId = String(order?._id || "");
       const normalizedStatus = String(order?.status || "").toLowerCase();
+      if (String(order?.orderType || "").toLowerCase() === "cigarette" && normalizedStatus === "paid") {
+        apiFetch(`/api/menu/cigarette-principal/${cafeId}`, {
+          headers: { ...(token ? authHeaders() : {}) },
+        })
+          .then((balance) => setCigarettePrincipalBalance(Number(balance?.principalBalance || 0)))
+          .catch(() => {});
+      }
       if (normalizedStatus !== "pending") {
         pendingAlertOrderIdsRef.current.delete(orderId);
       }
@@ -818,6 +835,12 @@ export default function KitchenPage() {
         return filterKitchenLiveOrders(next);
       });
       setTodayOrders((prev) => upsertOrder(prev, updated));
+      if (String(status).toLowerCase() === "paid" && String(updated?.orderType || "").toLowerCase() === "cigarette") {
+        const balance = await apiFetch(`/api/menu/cigarette-principal/${cafeId}`, {
+          headers: { ...(token ? authHeaders() : {}) },
+        });
+        setCigarettePrincipalBalance(Number(balance?.principalBalance || 0));
+      }
       if (String(updated?.status || status).toLowerCase() !== "pending") {
         pendingAlertOrderIdsRef.current.delete(String(orderId));
         if (pendingAlertOrderIdsRef.current.size > 0) {
@@ -1434,24 +1457,29 @@ export default function KitchenPage() {
     if (rawTableNumber && (!maxTableNumber || parsedTableNumber > maxTableNumber)) {
       return { error: `Table number must be between 1 and ${maxTableNumber || 0}` };
     }
-    if (!customerName) {
-      return { error: "Customer name is required for a manual order" };
-    }
-    if (!phone) {
-      return { error: "Phone number is required for a manual order" };
-    }
-    if (!/^\d{10}$/.test(phone)) {
-      return { error: "Enter a valid 10-digit phone number" };
-    }
     if (!Array.isArray(draft.items) || draft.items.length === 0) {
       return { error: "Add at least one item to the order" };
     }
 
+    const cigaretteLines = draft.items.filter((item) =>
+      isCigaretteMenuItem(menuById.get(String(item.menuItemId)), cafeInfo),
+    );
+    const isCigaretteOrder = cigaretteLines.length === draft.items.length;
+    if (cigaretteLines.length > 0 && !isCigaretteOrder) {
+      return { error: "Cigarette and food items must be ordered separately" };
+    }
+    if (!isCigaretteOrder) {
+      if (!customerName) return { error: "Customer name is required for a manual order" };
+      if (!phone) return { error: "Phone number is required for a manual order" };
+      if (!/^\d{10}$/.test(phone)) return { error: "Enter a valid 10-digit phone number" };
+    }
+
     return {
       payload: {
+        orderType: isCigaretteOrder ? "cigarette" : "food",
         tableNumber: parsedTableNumber,
-        customerName,
-        phone,
+        customerName: isCigaretteOrder ? "" : customerName,
+        phone: isCigaretteOrder ? "" : phone,
         notes: String(draft.notes || "").trim(),
         paymentMode: draft.paymentMode,
         status: draft.status,
@@ -1907,8 +1935,15 @@ export default function KitchenPage() {
                 {quickOrderCategory === "All" ? "Most ordered items first" : quickOrderCategory}
               </div>
             </div>
-            <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
-              {quickOrderGridItems.length} item{quickOrderGridItems.length === 1 ? "" : "s"}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
+                {quickOrderGridItems.length} item{quickOrderGridItems.length === 1 ? "" : "s"}
+              </div>
+              {cigarettePrincipalBalance !== null && menuItems.some((item) => isCigaretteMenuItem(item, cafeInfo)) ? (
+                <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold tabular-nums text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+                  INR {cigarettePrincipalBalance.toFixed(2)} balance
+                </div>
+              ) : null}
             </div>
           </div>
 
