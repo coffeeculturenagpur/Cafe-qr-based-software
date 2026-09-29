@@ -248,7 +248,7 @@ export default function KitchenPage() {
     ).length;
     const todayTotalOrders = todayOrders.length;
     const todayRevenue = todayOrders
-      .filter((o) => String(o?.status || "").toLowerCase() !== "rejected")
+      .filter((o) => String(o?.status || "").trim().toLowerCase() === "paid")
       .reduce((sum, order) => sum + getOrderTotal(order, cafeInfo), 0);
     return { total, queue, preparing, todayTotalOrders, todayRevenue };
   }, [orders, todayOrders, cafeInfo]);
