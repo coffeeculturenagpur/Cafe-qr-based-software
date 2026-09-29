@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../../lib/api";
 import { authHeaders } from "../../lib/auth";
-import { filterCigaretteMenuItems, getCigaretteSalePrice } from "../../lib/cigaretteMenu";
+import { filterCigaretteMenuItems, getCigaretteSalePrice, resolveCigaretteCategories } from "../../lib/cigaretteMenu";
 import { filterCigaretteLiveOrders, isCigaretteOrder } from "../../lib/staffOrderFilters";
 import { ordersTodayQueryString } from "../../lib/staffOrderRange";
 import { printCigaretteBill } from "../../lib/receiptHtml";
@@ -54,10 +54,30 @@ export function CigarettePanel({
   const [principalBalance, setPrincipalBalance] = useState(0);
   const [principalDraft, setPrincipalDraft] = useState("");
 
-  const cigaretteItems = useMemo(
-    () => filterCigaretteMenuItems(menuItems, cafeInfo),
-    [menuItems, cafeInfo]
-  );
+  const cigaretteItems = useMemo(() => {
+    const categoryOrder = new Map(
+      resolveCigaretteCategories(cafeInfo).map((category, index) => [category.toLowerCase(), index]),
+    );
+    const configuredOrder = new Map(
+      [
+        ...(Array.isArray(cafeInfo?.quickOrderCigarette25Ids) ? cafeInfo.quickOrderCigarette25Ids : []),
+        ...(Array.isArray(cafeInfo?.quickOrderCigarette30Ids) ? cafeInfo.quickOrderCigarette30Ids : []),
+      ].map((id, index) => [String(id), index]),
+    );
+    return filterCigaretteMenuItems(menuItems, cafeInfo).slice().sort((left, right) => {
+      const leftConfigured = configuredOrder.get(String(left?._id));
+      const rightConfigured = configuredOrder.get(String(right?._id));
+      if (leftConfigured !== undefined || rightConfigured !== undefined) {
+        if (leftConfigured === undefined) return 1;
+        if (rightConfigured === undefined) return -1;
+        return leftConfigured - rightConfigured;
+      }
+      const categoryDiff = (categoryOrder.get(String(left?.category || "").toLowerCase()) ?? 999) -
+        (categoryOrder.get(String(right?.category || "").toLowerCase()) ?? 999);
+      if (categoryDiff) return categoryDiff;
+      return 0;
+    });
+  }, [menuItems, cafeInfo]);
 
   const liveOrders = useMemo(() => filterCigaretteLiveOrders(orders), [orders]);
 

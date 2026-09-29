@@ -28,7 +28,7 @@ import { Card, CardContent } from "../../components/ui/Card";
 import { Input, Textarea } from "../../components/ui/Input";
 import { AppLoading } from "../../components/AppLoading";
 import { getCafeUpdateSignalKey, getCafeWithCache } from "../../lib/cafeClient";
-import { getMenuUpdateSignalKey, getMenuWithCache } from "../../lib/menuClient";
+import { getMenuUpdateSignalKey } from "../../lib/menuClient";
 import { getOrderStatusPalette } from "../../lib/orderStatusPalette";
 import { groupOrdersByTable } from "../../lib/orderGrouping";
 import {
@@ -381,8 +381,15 @@ export default function KitchenPage() {
   }, [cigaretteShortcutBuckets, quickOrderShortcutItems]);
 
   const quickOrderCategoryTabs = useMemo(() => {
-    return ["All", ...resolveQuickOrderCategories(cafeInfo)];
-  }, [cafeInfo?.quickOrderCategories]);
+    const configured = resolveQuickOrderCategories(cafeInfo);
+    const configuredKeys = new Set(configured.map((category) => category.toLowerCase()));
+    const cigaretteCategories = menuItems
+      .map((item) => String(item?.category || "").trim())
+      .filter((category) => category && /cigaret/i.test(category))
+      .filter((category, index, list) => list.findIndex((entry) => entry.toLowerCase() === category.toLowerCase()) === index)
+      .filter((category) => !configuredKeys.has(category.toLowerCase()));
+    return ["All", ...configured, ...cigaretteCategories];
+  }, [cafeInfo?.quickOrderCategories, menuItems]);
 
   // All-categories map: every category from the full menu, including cigarettes.
   const allCategoryItemsMap = useMemo(() => {
@@ -395,18 +402,21 @@ export default function KitchenPage() {
       if (!grouped.has(key)) grouped.set(key, []);
       grouped.get(key).push({ ...item, menuItemId: String(item._id || "") });
     }
-    for (const items of grouped.values()) {
-      items.sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
-    }
     return grouped;
   }, [menuItems]);
 
   const allQuickOrderCategories = useMemo(() => {
-    const entries = Array.from(allCategoryItemsMap.entries())
-      .map(([name, items]) => ({ name, count: items.length }));
-    entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    const entries = [];
+    const seen = new Set();
+    const orderedCategories = [...quickOrderCategoryTabs.slice(1), ...allCategoryItemsMap.keys()];
+    for (const name of orderedCategories) {
+      const key = name.toLowerCase();
+      if (seen.has(key) || !allCategoryItemsMap.has(name)) continue;
+      seen.add(key);
+      entries.push({ name, count: allCategoryItemsMap.get(name).length });
+    }
     return entries;
-  }, [allCategoryItemsMap]);
+  }, [allCategoryItemsMap, quickOrderCategoryTabs]);
 
   const quickOrderGridItems = useMemo(() => {
     const popularity = new Map(
@@ -434,7 +444,7 @@ export default function KitchenPage() {
             (popularity.get(String(left?._id || left?.menuItemId || "")) || 0);
           if (scoreDiff) return scoreDiff;
         }
-        return String(left?.name || "").localeCompare(String(right?.name || ""));
+        return 0;
       });
 
     // The default view shows the complete menu, with most-ordered items first.
@@ -627,7 +637,12 @@ export default function KitchenPage() {
               headers: { ...(token ? authHeaders() : {}) },
             }),
             getCafeWithCache(cafeId, { force: forceStatic }),
-            getMenuWithCache(cafeId, { force: forceStatic }),
+            // The customer menu deliberately excludes counter-only cigarettes.
+            // Kitchen needs the authenticated staff menu so cigarette items appear
+            // in the Menu items category grid as well as the cigarette counter.
+            apiFetch(`/api/menu/${cafeId}/staff`, {
+              headers: { ...(token ? authHeaders() : {}) },
+            }),
             apiFetch(`/api/orders/${cafeId}/popular-items`, {
               headers: { ...(token ? authHeaders() : {}) },
             }).catch(() => []),
