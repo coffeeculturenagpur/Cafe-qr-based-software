@@ -1465,9 +1465,8 @@ export default function KitchenPage() {
       isCigaretteMenuItem(menuById.get(String(item.menuItemId)), cafeInfo),
     );
     const isCigaretteOrder = cigaretteLines.length === draft.items.length;
-    if (cigaretteLines.length > 0 && !isCigaretteOrder) {
-      return { error: "Cigarette and food items must be ordered separately" };
-    }
+    // A mixed cart is a kitchen order. Pure cigarette carts remain counter
+    // tickets so the cigarette panel can keep handling those separately.
     if (!isCigaretteOrder) {
       if (!customerName) return { error: "Customer name is required for a manual order" };
       if (!phone) return { error: "Phone number is required for a manual order" };

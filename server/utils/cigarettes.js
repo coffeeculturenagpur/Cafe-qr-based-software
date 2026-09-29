@@ -64,16 +64,14 @@ function partitionResolvedItemsByType(resolvedItems, menuMap, categorySet) {
 
 function assertItemsMatchOrderType(resolvedItems, menuMap, categorySet, orderType) {
   const wantCigarette = String(orderType || "").toLowerCase() === "cigarette";
+  // Food orders may contain cigarette lines when they are part of a combined
+  // kitchen order. Pure cigarette orders are still restricted to cigarettes.
+  if (!wantCigarette) return;
   for (const item of Array.isArray(resolvedItems) ? resolvedItems : []) {
     const menuDoc = menuMap?.get(String(item?.menuItemId || "")) || null;
     const isCig = isCigaretteMenuItem(menuDoc || item, categorySet);
-    if (wantCigarette && !isCig) {
+    if (!isCig) {
       const error = new Error("Cigarette orders may only include cigarette menu items");
-      error.status = 400;
-      throw error;
-    }
-    if (!wantCigarette && isCig) {
-      const error = new Error("Food orders may not include cigarette menu items");
       error.status = 400;
       throw error;
     }

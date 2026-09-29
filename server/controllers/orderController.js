@@ -786,14 +786,8 @@ exports.createStaffOrder = async (req, res) => {
     const allCigarette = resolvedItems.every((item) =>
       isCigaretteMenuItem(menuMap.get(String(item.menuItemId)), cigaretteCategorySet)
     );
-    const anyCigarette = resolvedItems.some((item) =>
-      isCigaretteMenuItem(menuMap.get(String(item.menuItemId)), cigaretteCategorySet)
-    );
-
-    if (anyCigarette && !allCigarette) {
-      return res.status(400).json({ message: "Cigarette and food items cannot be mixed in one order" });
-    }
-
+    // Mixed carts are regular kitchen orders. Only carts made entirely of
+    // cigarette items are treated as counter-only cigarette tickets.
     const orderType =
       requestedOrderType === "cigarette" || allCigarette ? "cigarette" : "food";
 
