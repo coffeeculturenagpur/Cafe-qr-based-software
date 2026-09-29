@@ -79,7 +79,7 @@ export function buildReceiptHtml(order, cafeInfo, options = {}) {
       body, body * { font-weight: 700 !important; color: #000 !important; }
       h1 { margin: 0; font-size: 17px; text-align: center; letter-spacing: 0.04em; }
       .center { text-align: center; }
-      .logo { display: block; width: 190px; height: 105px; margin: 0 auto 8px; object-fit: contain; }
+      .logo { display: block; width: 220px; height: 130px; margin: 0 auto 8px; object-fit: contain; }
       .cafe-name {
         margin-bottom: 4px; font-size: 16px; font-weight: 700; text-align: center;
         text-transform: uppercase; word-break: break-word;

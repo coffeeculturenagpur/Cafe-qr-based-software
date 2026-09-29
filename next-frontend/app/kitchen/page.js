@@ -1102,8 +1102,8 @@ export default function KitchenPage() {
 
             .logo {
               display: block;
-              width: 190px;
-              height: 105px;
+              width: 220px;
+              height: 130px;
               margin: 0 auto 8px;
               object-fit: contain;
             }
@@ -1272,6 +1272,7 @@ export default function KitchenPage() {
           <!-- ═══════════ KITCHEN COPY (KOT) ═══════════ -->
           <section id="kot-section" class="kitchen-copy">
             <div class="center">
+              <img class="logo" src="${billLogo}" alt="The Coffee Culture logo" />
               <div class="kitchen-header">Kitchen Order (KOT)</div>
               <span class="tag">Chef Copy</span>
             </div>

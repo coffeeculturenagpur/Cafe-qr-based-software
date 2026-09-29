@@ -342,8 +342,8 @@ export default function WaiterPage() {
 
             .logo {
               display: block;
-              width: 190px;
-              height: 105px;
+              width: 220px;
+              height: 130px;
               margin: 0 auto 8px;
               object-fit: contain;
             }
