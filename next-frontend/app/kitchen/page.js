@@ -1042,8 +1042,8 @@ export default function KitchenPage() {
 
     const kitchenRowsHtml = items.map(it => `
       <tr>
-        <td style="padding: 6px 0; font-size: 16px; font-weight: bold; width: 80%;">${String(it.name || "Item")}</td>
-        <td style="padding: 6px 0; text-align: right; font-size: 16px; font-weight: bold; width: 20%; white-space: nowrap;">x ${Number(it.qty || 1)}</td>
+        <td style="padding: 6px 0; font-size: 18px; font-weight: bold; width: 80%;">${String(it.name || "Item")}</td>
+        <td style="padding: 6px 0; text-align: right; font-size: 18px; font-weight: bold; width: 20%; white-space: nowrap;">x ${Number(it.qty || 1)}</td>
       </tr>
     `).join("");
 
@@ -1070,7 +1070,7 @@ export default function KitchenPage() {
               background: #fff;
               color: #111827;
               font-family: "Courier New", Courier, monospace;
-              font-size: 11px;
+              font-size: 13px;
               line-height: 1.35;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
@@ -1091,7 +1091,7 @@ export default function KitchenPage() {
 
             h1 {
               margin: 0;
-              font-size: 15px;
+              font-size: 17px;
               text-align: center;
               letter-spacing: 0.04em;
             }
@@ -1110,7 +1110,7 @@ export default function KitchenPage() {
 
             .cafe-name {
               margin-bottom: 4px;
-              font-size: 14px;
+              font-size: 16px;
               font-weight: 700;
               text-align: center;
               text-transform: uppercase;
@@ -1143,7 +1143,7 @@ export default function KitchenPage() {
             }
 
             th {
-              font-size: 10px;
+              font-size: 12px;
               text-transform: uppercase;
               letter-spacing: 0.04em;
               text-align: left;
@@ -1193,7 +1193,7 @@ export default function KitchenPage() {
               margin-top: 6px;
               padding-top: 6px;
               border-top: 1px dashed #111827;
-              font-size: 13px;
+              font-size: 15px;
               font-weight: 700;
             }
 
@@ -1204,7 +1204,7 @@ export default function KitchenPage() {
             }
 
             .note-title {
-              font-size: 10px;
+              font-size: 12px;
               font-weight: 700;
               text-transform: uppercase;
               letter-spacing: 0.04em;
@@ -1221,14 +1221,14 @@ export default function KitchenPage() {
               padding-top: 6px;
               border-top: 1px dashed #111827;
               text-align: center;
-              font-size: 10px;
+              font-size: 12px;
             }
 
             .tag {
               display: inline-block;
               border: 1px solid #111827;
               padding: 2px 8px;
-              font-size: 10px;
+              font-size: 12px;
               font-weight: bold;
               letter-spacing: 1px;
               text-transform: uppercase;
@@ -1236,7 +1236,7 @@ export default function KitchenPage() {
             }
 
             .kitchen-header {
-              font-size: 18px;
+              font-size: 20px;
               font-weight: bold;
               text-transform: uppercase;
               letter-spacing: 1px;
@@ -1286,8 +1286,8 @@ export default function KitchenPage() {
             <table>
               <thead>
                 <tr>
-                  <th style="font-size: 12px; font-weight: bold; width: 80%;">Item</th>
-                  <th style="font-size: 12px; font-weight: bold; text-align: right; width: 20%;">Qty</th>
+                  <th style="font-size: 14px; font-weight: bold; width: 80%;">Item</th>
+                  <th style="font-size: 14px; font-weight: bold; text-align: right; width: 20%;">Qty</th>
                 </tr>
               </thead>
               <tbody>
@@ -1302,7 +1302,7 @@ export default function KitchenPage() {
               </div>
               <div class="divider"></div>
             ` : ""}
-            <div class="center" style="font-size:10px; margin-top: 6px;">— Prepare promptly —</div>
+            <div class="center" style="font-size:12px; margin-top: 6px;">— Prepare promptly —</div>
           </section>
 
           <!-- ═══════════ CUSTOMER COPY ═══════════ -->

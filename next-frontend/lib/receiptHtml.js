@@ -69,16 +69,16 @@ export function buildReceiptHtml(order, cafeInfo, options = {}) {
       * { box-sizing: border-box; }
       html, body {
         margin: 0; padding: 0; background: #fff; color: #111827;
-        font-family: "Courier New", Courier, monospace; font-size: 11px; line-height: 1.35; font-weight: 700;
+        font-family: "Courier New", Courier, monospace; font-size: 13px; line-height: 1.35; font-weight: 700;
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
       }
       body { width: 74mm; margin: 0 auto; padding: 2mm 0; }
       body, body * { font-weight: 700 !important; color: #000 !important; }
-      h1 { margin: 0; font-size: 15px; text-align: center; letter-spacing: 0.04em; }
+      h1 { margin: 0; font-size: 17px; text-align: center; letter-spacing: 0.04em; }
       .center { text-align: center; }
       .logo { display: block; margin: 0 auto 6px; max-width: 150px; max-height: 82px; object-fit: contain; }
       .cafe-name {
-        margin-bottom: 4px; font-size: 14px; font-weight: 700; text-align: center;
+        margin-bottom: 4px; font-size: 16px; font-weight: 700; text-align: center;
         text-transform: uppercase; word-break: break-word;
       }
       .meta { margin-top: 8px; }
@@ -87,7 +87,7 @@ export function buildReceiptHtml(order, cafeInfo, options = {}) {
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
       th, td { padding: 4px 0; vertical-align: top; }
       th {
-        font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+        font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
         text-align: left; border-bottom: 1px dashed #111827;
       }
       .item-name { width: 58%; padding-right: 6px; word-break: break-word; }
@@ -98,18 +98,18 @@ export function buildReceiptHtml(order, cafeInfo, options = {}) {
       .line span:last-child { white-space: nowrap; text-align: right; }
       .total {
         margin-top: 6px; padding-top: 6px; border-top: 1px dashed #111827;
-        font-size: 13px; font-weight: 700;
+        font-size: 15px; font-weight: 700;
       }
       .note-box { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #111827; }
-      .note-title { font-size: 10px; font-weight: 700; text-transform: uppercase; }
+      .note-title { font-size: 12px; font-weight: 700; text-transform: uppercase; }
       .note-text { margin-top: 3px; word-break: break-word; white-space: pre-wrap; }
       .footer {
         margin-top: 10px; padding-top: 6px; border-top: 1px dashed #111827;
-        text-align: center; font-size: 10px;
+        text-align: center; font-size: 12px;
       }
       .tag {
         display: inline-block; border: 1px solid #111827; padding: 2px 8px;
-        font-size: 10px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;
+        font-size: 12px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;
       }
     </style>
   </head>
