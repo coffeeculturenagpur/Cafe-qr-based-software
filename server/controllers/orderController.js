@@ -570,6 +570,18 @@ exports.listOrdersByCafe = async (req, res) => {
       else if (parts.length > 1) q.status = { $in: parts };
     }
 
+    // History is a completed-order view. Pending and in-progress tickets
+    // belong on the live boards, never in staff history.
+    if (scope === "history") {
+      const completedStatuses = ["paid", "rejected"];
+      if (q.status) {
+        const requested = Array.isArray(q.status.$in) ? q.status.$in : [q.status];
+        q.status = { $in: requested.filter((value) => completedStatuses.includes(String(value).toLowerCase())) };
+      } else {
+        q.status = { $in: completedStatuses };
+      }
+    }
+
     // Waiters only see food orders after the chef marks them ready. The chef
     // dashboard owns the full live lifecycle, including service and payment.
     if (

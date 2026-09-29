@@ -197,6 +197,7 @@ export default function KitchenPage() {
   const [socketState, setSocketState] = useState("disconnected");
   const [cafeInfo, setCafeInfo] = useState(null);
   const [alertMsg, setAlertMsg] = useState("");
+  const [alertVariant, setAlertVariant] = useState("warn");
   const [menuItems, setMenuItems] = useState([]);
   const [cigarettePrincipalBalance, setCigarettePrincipalBalance] = useState(null);
   const [popularMenuItems, setPopularMenuItems] = useState([]);
@@ -228,6 +229,14 @@ export default function KitchenPage() {
   const [kitchenTab, setKitchenTab] = useState("kitchen");
   const tableCardRefs = useRef({});
   const pendingAlertOrderIdsRef = useRef(new Set());
+  const alertTimeoutRef = useRef(null);
+
+  const showAlert = useCallback((message, variant = "warn", duration = 8000) => {
+    setAlertMsg(message);
+    setAlertVariant(variant);
+    window.clearTimeout(alertTimeoutRef.current);
+    alertTimeoutRef.current = window.setTimeout(() => setAlertMsg(""), duration);
+  }, []);
 
   const stats = useMemo(() => {
     const total = orders.length;
@@ -790,10 +799,10 @@ export default function KitchenPage() {
       syncPendingAlertLoop();
       const line =
         order?.items?.map((i) => `${i.name}×${i.qty}`).join(", ") || "";
-      setAlertMsg(
+      showAlert(
         `New order · ${formatKitchenTableLabel(order.tableNumber)}${line ? ` · ${line.slice(0, 80)}` : ""}`,
+        "warn",
       );
-      setTimeout(() => setAlertMsg(""), 8000);
       if (!isManualOrder) {
         maybeNotifyBrowser("New kitchen order", formatKitchenTableLabel(order.tableNumber));
       }
@@ -810,7 +819,7 @@ export default function KitchenPage() {
       socket.off("JOIN_ERROR");
       socket.disconnect();
     };
-  }, [cafeId, token]);
+  }, [cafeId, token, showAlert]);
 
   useEffect(() => {
     if (selectedTableKey && !selectedGroup) {
@@ -835,6 +844,12 @@ export default function KitchenPage() {
         return filterKitchenLiveOrders(next);
       });
       setTodayOrders((prev) => upsertOrder(prev, updated));
+      if (String(status).toLowerCase() === "paid") {
+        showAlert(
+          `${formatKitchenTableLabel(updated?.tableNumber)} order marked paid and moved to history.`,
+          "success",
+        );
+      }
       if (String(status).toLowerCase() === "paid" && String(updated?.orderType || "").toLowerCase() === "cigarette") {
         const balance = await apiFetch(`/api/menu/cigarette-principal/${cafeId}`, {
           headers: { ...(token ? authHeaders() : {}) },
@@ -1720,8 +1735,33 @@ export default function KitchenPage() {
               </div>
             </div>
           </div>
-          <div className="min-w-0 text-sm text-slate-600">
-            Socket: <span className="font-semibold">{socketState}</span>
+          <div
+            role="status"
+            aria-live="polite"
+            title={`Socket.IO: ${socketState}`}
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-bold ${
+              socketState === "connected"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : socketState === "connecting"
+                  ? "border-amber-200 bg-amber-50 text-amber-800"
+                  : "border-rose-200 bg-rose-50 text-rose-800"
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className={`h-2 w-2 rounded-full ${
+                socketState === "connected"
+                  ? "animate-pulse bg-emerald-500"
+                  : socketState === "connecting"
+                    ? "bg-amber-500"
+                    : "bg-rose-500"
+              }`}
+            />
+            {socketState === "connected"
+              ? "Live"
+              : socketState === "connecting"
+                ? "Connecting"
+                : "Offline"}
           </div>
           <Button
             variant="outline"
@@ -2453,7 +2493,17 @@ export default function KitchenPage() {
           </Card>
         )}
 
-        {alertMsg && <StaffAlertBanner message={alertMsg} variant="warn" />}
+        {alertMsg && (
+          <div
+            className={
+              alertVariant === "success"
+                ? "fixed left-1/2 top-4 z-[60] w-[min(92vw,560px)] -translate-x-1/2"
+                : ""
+            }
+          >
+            <StaffAlertBanner message={alertMsg} variant={alertVariant} />
+          </div>
+        )}
 
         {error && <div className="text-red-700 font-semibold">{error}</div>}
         {menuError && (

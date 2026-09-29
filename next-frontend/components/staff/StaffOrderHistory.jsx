@@ -20,6 +20,12 @@ function cigaretteHistoryTotal(order) {
   );
 }
 
+function historyOrderTotal(order) {
+  return isCigaretteOrder(order)
+    ? cigaretteHistoryTotal(order)
+    : Number(order?.totalAmount || 0);
+}
+
 function HistoryOrderCard({ order }) {
   const cigarette = isCigaretteOrder(order);
   const manual = String(order.source || "").toLowerCase() === "manual";
@@ -93,8 +99,14 @@ export default function StaffOrderHistory({ title, backHref, roleGate, dashboard
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [paidNotes, setPaidNotes] = useState([]);
-  const regularOrders = useMemo(() => orders.filter((order) => !isCigaretteOrder(order)), [orders]);
-  const cigaretteOrders = useMemo(() => orders.filter(isCigaretteOrder), [orders]);
+  const completedOrders = useMemo(
+    () => orders.filter((order) => ["paid", "rejected"].includes(String(order?.status || "").trim().toLowerCase())),
+    [orders]
+  );
+  const regularOrders = useMemo(() => completedOrders.filter((order) => !isCigaretteOrder(order)), [completedOrders]);
+  const cigaretteOrders = useMemo(() => completedOrders.filter(isCigaretteOrder), [completedOrders]);
+  const regularRevenue = useMemo(() => regularOrders.reduce((sum, order) => sum + historyOrderTotal(order), 0), [regularOrders]);
+  const cigaretteRevenue = useMemo(() => cigaretteOrders.reduce((sum, order) => sum + historyOrderTotal(order), 0), [cigaretteOrders]);
 
   useEffect(() => {
     if (!showPaymentNotes || !cafeId || typeof window === "undefined") return;
@@ -283,12 +295,18 @@ export default function StaffOrderHistory({ title, backHref, roleGate, dashboard
 
       <div className="grid min-w-0 gap-5 lg:grid-cols-2">
         <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 shadow-sm lg:col-start-1 lg:row-start-1">
-          <h2 className="font-black text-slate-900">Regular item orders</h2>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{regularOrders.length}</span>
+          <div>
+            <h2 className="font-black text-slate-900">Regular item orders</h2>
+            <div className="mt-1 text-xs font-semibold text-slate-500">Revenue: INR {regularRevenue.toFixed(2)}</div>
+          </div>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{regularOrders.length} orders</span>
         </div>
         <div className="flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 shadow-sm lg:col-start-2 lg:row-start-1">
-          <h2 className="font-black text-amber-950">Cigarette orders</h2>
-          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-amber-800">{cigaretteOrders.length}</span>
+          <div>
+            <h2 className="font-black text-amber-950">Cigarette orders</h2>
+            <div className="mt-1 text-xs font-semibold text-amber-800">Revenue: INR {cigaretteRevenue.toFixed(2)}</div>
+          </div>
+          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-amber-800">{cigaretteOrders.length} orders</span>
         </div>
         <div className="col-span-full grid min-w-0 gap-5 lg:grid-cols-2">
           <div className="min-w-0 space-y-3">
