@@ -38,7 +38,10 @@ export function buildReceiptHtml(order, cafeInfo, options = {}) {
   const tag = options.tag || "Customer Copy";
   const billType = options.billType || "Combined final bill";
   const cafeName = cafeInfo?.name || "Cafe";
-  const cafeLogo = cafeInfo?.logoUrl || "";
+  const billLogo =
+    typeof window !== "undefined"
+      ? new URL("/tcc-logo.png", window.location.origin).href
+      : "/tcc-logo.png";
   const orderIdShort = String(order?._id || "").slice(-6).toUpperCase();
   const createdAt = order?.createdAt ? new Date(order.createdAt).toLocaleString() : new Date().toLocaleString();
   const tableLabel =
@@ -76,7 +79,7 @@ export function buildReceiptHtml(order, cafeInfo, options = {}) {
       body, body * { font-weight: 700 !important; color: #000 !important; }
       h1 { margin: 0; font-size: 17px; text-align: center; letter-spacing: 0.04em; }
       .center { text-align: center; }
-      .logo { display: block; margin: 0 auto 6px; max-width: 150px; max-height: 82px; object-fit: contain; }
+      .logo { display: block; width: 190px; height: 105px; margin: 0 auto 8px; object-fit: contain; }
       .cafe-name {
         margin-bottom: 4px; font-size: 16px; font-weight: 700; text-align: center;
         text-transform: uppercase; word-break: break-word;
@@ -114,7 +117,7 @@ export function buildReceiptHtml(order, cafeInfo, options = {}) {
     </style>
   </head>
   <body>
-    ${cafeLogo ? `<img class="logo" src="${escapeHtml(cafeLogo)}" alt="Cafe logo" />` : ""}
+    <img class="logo" src="${escapeHtml(billLogo)}" alt="The Coffee Culture logo" />
     <div class="cafe-name">${escapeHtml(cafeName)}</div>
     <h1>${escapeHtml(title)}</h1>
     <div class="center"><span class="tag">${escapeHtml(tag)}</span></div>

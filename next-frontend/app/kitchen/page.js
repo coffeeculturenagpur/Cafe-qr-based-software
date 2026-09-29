@@ -999,7 +999,7 @@ export default function KitchenPage() {
       ? "sequential-print"
       : "customer-only";
     const cafeName = cafeInfo?.name || "Coffee Culture";
-    const cafeLogo = cafeInfo?.logoUrl || "";
+    const billLogo = new URL("/tcc-logo.png", window.location.origin).href;
     const taxRate = Number(cafeInfo?.taxPercent || 0);
     const discountType = cafeInfo?.discountType || "percent";
     const discountValue = Number(cafeInfo?.discountValue || 0);
@@ -1102,9 +1102,9 @@ export default function KitchenPage() {
 
             .logo {
               display: block;
-              margin: 0 auto 6px;
-              max-width: 150px;
-              max-height: 82px;
+              width: 190px;
+              height: 105px;
+              margin: 0 auto 8px;
               object-fit: contain;
             }
 
@@ -1307,7 +1307,7 @@ export default function KitchenPage() {
 
           <!-- ═══════════ CUSTOMER COPY ═══════════ -->
           <section id="customer-section" class="customer-copy" ${isBoth ? 'style="display: none;"' : ""}>
-          ${cafeLogo ? `<img class="logo" src="${cafeLogo}" alt="Cafe logo" />` : ""}
+          <img class="logo" src="${billLogo}" alt="The Coffee Culture logo" />
           <div class="cafe-name">${cafeName}</div>
           <h1>Final Bill</h1>
           <div class="center"><span class="tag">Customer Copy</span></div>

@@ -285,7 +285,7 @@ export default function WaiterPage() {
         : (subtotal * discountValue) / 100;
     const total = hasServerPricing ? Number(order.totalAmount || 0) : Math.max(0, subtotal + tax - discount);
     const cafeName = cafeInfo?.name || "QRDine";
-    const cafeLogo = cafeInfo?.logoUrl || "";
+    const billLogo = new URL("/tcc-logo.png", window.location.origin).href;
     const orderNote = typeof order?.notes === "string" ? order.notes.trim() : "";
 
     const html = `
@@ -313,8 +313,14 @@ export default function WaiterPage() {
               font-family: "Courier New", Courier, monospace;
               font-size: 11px;
               line-height: 1.35;
+              font-weight: 700;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
+            }
+
+            body, body * {
+              font-weight: 700 !important;
+              color: #000 !important;
             }
 
             body {
@@ -336,9 +342,9 @@ export default function WaiterPage() {
 
             .logo {
               display: block;
-              margin: 0 auto 6px;
-              max-width: 110px;
-              max-height: 48px;
+              width: 190px;
+              height: 105px;
+              margin: 0 auto 8px;
               object-fit: contain;
             }
 
@@ -470,7 +476,7 @@ export default function WaiterPage() {
           </style>
         </head>
         <body>
-          ${cafeLogo ? `<img class="logo" src="${cafeLogo}" alt="Cafe logo" />` : ""}
+          <img class="logo" src="${billLogo}" alt="The Coffee Culture logo" />
           <div class="cafe-name">${cafeName}</div>
           <h1>Final Bill</h1>
           <div class="center">--------------------------------</div>
@@ -537,11 +543,13 @@ export default function WaiterPage() {
 
     const receiptWindow = window.open("", "_blank", "width=420,height=720");
     if (!receiptWindow) return;
+    receiptWindow.onload = () => {
+      receiptWindow.focus();
+      receiptWindow.print();
+    };
     receiptWindow.document.open();
     receiptWindow.document.write(html);
     receiptWindow.document.close();
-    receiptWindow.focus();
-    setTimeout(() => receiptWindow.print(), 250);
   };
 
   const motionInitial = mounted && !reducedMotion ? { opacity: 0, y: 10 } : false;
