@@ -1784,7 +1784,7 @@ export default function KitchenPage() {
           </div>
         </section>
 
-        <div className="flex w-full flex-wrap items-center justify-between gap-3">
+        <div className="flex w-full flex-wrap items-center gap-3">
           <div
             role="status"
             aria-live="polite"
