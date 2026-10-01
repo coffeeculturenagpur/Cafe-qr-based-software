@@ -530,6 +530,7 @@ exports.listOrdersByCafe = async (req, res) => {
     }
     const q = { cafeId };
     const { from, to, minTotal, maxTotal, status } = req.query;
+    const dateField = String(req.query.dateField || "").trim().toLowerCase();
     const scope = String(req.query.scope || "").trim().toLowerCase();
     const orderType = String(req.query.orderType || "").trim().toLowerCase();
 
@@ -545,9 +546,23 @@ exports.listOrdersByCafe = async (req, res) => {
     }
 
     if (from || to) {
-      q.createdAt = {};
-      if (from) q.createdAt.$gte = new Date(String(from));
-      if (to) q.createdAt.$lte = new Date(String(to));
+      const dateRange = {};
+      if (from) dateRange.$gte = new Date(String(from));
+      if (to) dateRange.$lte = new Date(String(to));
+      if (dateField === "paidat") {
+        const paidDateConditions = [
+          { paidAt: dateRange },
+          { paidAt: null, createdAt: dateRange },
+        ];
+        if (q.$or) {
+          q.$and = [...(q.$and || []), { $or: q.$or }, { $or: paidDateConditions }];
+          delete q.$or;
+        } else {
+          q.$or = paidDateConditions;
+        }
+      } else {
+        q.createdAt = dateRange;
+      }
     } else if (scope === "kitchen_live") {
       // Server-time based "business day" filter for the kitchen dashboard.
       // Keeps the UI independent of device/system time.

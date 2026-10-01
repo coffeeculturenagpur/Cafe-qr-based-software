@@ -38,7 +38,23 @@ import {
 } from "../../lib/orderTiming";
 import { TableStatusPad } from "../../components/staff/TableStatusPad";
 import { CigarettePanel } from "../../components/staff/CigarettePanel";
-import { ChevronDown, ClipboardList, QrCode, X, Check, Printer, StickyNote, CheckCircle2 } from "lucide-react";
+import {
+  ChevronDown,
+  ClipboardList,
+  QrCode,
+  X,
+  Check,
+  Printer,
+  StickyNote,
+  CheckCircle2,
+  Activity,
+  ArrowUpRight,
+  BellRing,
+  IndianRupee,
+  ListChecks,
+  RefreshCw,
+  Utensils,
+} from "lucide-react";
 import {
   buildQuickOrderCategoryLookup,
   canonicalizeQuickOrderCategory,
@@ -142,6 +158,25 @@ function getOrderTotal(order, cafeInfo) {
     : Math.max(0, subtotal + taxAmount - discount);
 }
 
+function monthToDateOrdersQueryString() {
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  return new URLSearchParams({
+    from: from.toISOString(),
+    to: now.toISOString(),
+    scope: "history",
+    status: "paid",
+    dateField: "paidAt",
+  }).toString();
+}
+
+function formatMonthLabel() {
+  return new Intl.DateTimeFormat("en-IN", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
+}
+
 function createEmptyOrderDraft(defaultStatus = "pending") {
   return {
     tableNumber: "",
@@ -190,7 +225,9 @@ export default function KitchenPage() {
   );
 
   const [orders, setOrders] = useState([]);
+  const [businessDayOrders, setBusinessDayOrders] = useState([]);
   const [todayOrders, setTodayOrders] = useState([]);
+  const [monthOrders, setMonthOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [quickOrderError, setQuickOrderError] = useState("");
@@ -246,12 +283,15 @@ export default function KitchenPage() {
     const preparing = orders.filter((o) =>
       ["preparing", "baking"].includes(o.status),
     ).length;
-    const todayTotalOrders = todayOrders.length;
+    const todayTotalOrders = businessDayOrders.length;
     const todayRevenue = todayOrders
       .filter((o) => String(o?.status || "").trim().toLowerCase() === "paid")
       .reduce((sum, order) => sum + getOrderTotal(order, cafeInfo), 0);
-    return { total, queue, preparing, todayTotalOrders, todayRevenue };
-  }, [orders, todayOrders, cafeInfo]);
+    const monthRevenue = monthOrders
+      .filter((o) => String(o?.status || "").trim().toLowerCase() === "paid")
+      .reduce((sum, order) => sum + getOrderTotal(order, cafeInfo), 0);
+    return { total, queue, preparing, todayTotalOrders, todayRevenue, monthRevenue };
+  }, [orders, businessDayOrders, todayOrders, monthOrders, cafeInfo]);
 
   const menuById = useMemo(
     () => new Map(menuItems.map((item) => [String(item._id), item])),
@@ -637,14 +677,22 @@ export default function KitchenPage() {
       setError("");
       setMenuError("");
       try {
-        const qs = ordersBusinessDayQueryString({ startHour: 1 });
-        const [liveList, todayList, cafeData, menuData, popularItemsData, cigarettePrincipal] =
+        const businessDayQs = ordersBusinessDayQueryString({ startHour: 1 });
+        const todayRevenueQs = `${businessDayQs}&scope=history&status=paid&dateField=paidAt`;
+        const monthQs = monthToDateOrdersQueryString();
+        const [liveList, businessDayList, todayRevenueList, monthList, cafeData, menuData, popularItemsData, cigarettePrincipal] =
           await Promise.all([
             // Use server-time scoped query so the reset is independent of device clock.
             apiFetch(`/api/orders/${cafeId}?scope=kitchen_live`, {
               headers: { ...(token ? authHeaders() : {}) },
             }),
-            apiFetch(`/api/orders/${cafeId}?${qs}`, {
+            apiFetch(`/api/orders/${cafeId}?${businessDayQs}`, {
+              headers: { ...(token ? authHeaders() : {}) },
+            }),
+            apiFetch(`/api/orders/${cafeId}?${todayRevenueQs}`, {
+              headers: { ...(token ? authHeaders() : {}) },
+            }),
+            apiFetch(`/api/orders/${cafeId}?${monthQs}`, {
               headers: { ...(token ? authHeaders() : {}) },
             }),
             getCafeWithCache(cafeId, { force: forceStatic }),
@@ -662,8 +710,12 @@ export default function KitchenPage() {
             }).catch(() => null),
           ]);
         const normalizedLiveList = Array.isArray(liveList) ? liveList : [];
-        const normalizedTodayList = Array.isArray(todayList) ? todayList : [];
+        const normalizedBusinessDayList = Array.isArray(businessDayList) ? businessDayList : [];
+        const normalizedTodayList = Array.isArray(todayRevenueList) ? todayRevenueList : [];
+        const normalizedMonthList = Array.isArray(monthList) ? monthList : [];
+        setBusinessDayOrders(normalizedBusinessDayList);
         setTodayOrders(normalizedTodayList);
+        setMonthOrders(normalizedMonthList);
         setOrders(filterKitchenLiveOrders(normalizedLiveList));
         setCafeInfo(cafeData || null);
         setMenuItems(Array.isArray(menuData) ? menuData : []);
@@ -770,7 +822,9 @@ export default function KitchenPage() {
       if (normalizedStatus !== "pending") {
         pendingAlertOrderIdsRef.current.delete(orderId);
       }
+      setBusinessDayOrders((prev) => upsertOrder(prev, order));
       setTodayOrders((prev) => upsertOrder(prev, order));
+      setMonthOrders((prev) => upsertOrder(prev, order));
       if (!isKitchenLiveOrder(order)) {
         pendingAlertOrderIdsRef.current.delete(orderId);
         syncPendingAlertLoop();
@@ -843,7 +897,9 @@ export default function KitchenPage() {
         );
         return filterKitchenLiveOrders(next);
       });
+      setBusinessDayOrders((prev) => upsertOrder(prev, updated));
       setTodayOrders((prev) => upsertOrder(prev, updated));
+      setMonthOrders((prev) => upsertOrder(prev, updated));
       if (String(status).toLowerCase() === "paid") {
         showAlert(
           `${formatKitchenTableLabel(updated?.tableNumber)} order marked paid and moved to history.`,
@@ -1606,7 +1662,9 @@ export default function KitchenPage() {
               body: JSON.stringify(payload),
             });
 
+      setBusinessDayOrders((prev) => upsertOrder(prev, updated));
       setTodayOrders((prev) => upsertOrder(prev, updated));
+      setMonthOrders((prev) => upsertOrder(prev, updated));
       if (isKitchenLiveOrder(updated)) {
         setOrders((prev) => upsertOrder(prev, updated));
       } else {
@@ -1639,7 +1697,9 @@ export default function KitchenPage() {
         body: JSON.stringify(result.payload),
       });
 
+      setBusinessDayOrders((prev) => upsertOrder(prev, updated));
       setTodayOrders((prev) => upsertOrder(prev, updated));
+      setMonthOrders((prev) => upsertOrder(prev, updated));
       if (isKitchenLiveOrder(updated)) {
         setOrders((prev) => upsertOrder(prev, updated));
       } else {
@@ -1692,49 +1752,39 @@ export default function KitchenPage() {
       contentClassName="w-full max-w-none pb-10"
     >
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
-            <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-br from-white to-orange-50/40 px-4 py-3 text-center shadow-sm ring-1 ring-orange-100/80">
-              <div className="text-xl font-bold tabular-nums text-slate-900">
-                {stats.todayTotalOrders}
-              </div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Today&apos;s orders
-              </div>
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(18rem,0.9fr)]" aria-label="Kitchen overview">
+          <div className="order-2 grid grid-cols-1 items-start gap-3 self-start sm:grid-cols-2 lg:order-1">
+            <div className="h-[124px] rounded-3xl border border-orange-200/80 bg-gradient-to-br from-white to-orange-50/70 p-3 shadow-sm dark:border-orange-900/70 dark:from-slate-900 dark:to-orange-950/30 sm:h-[132px] sm:p-4">
+              <div className="flex items-center justify-between gap-2 text-orange-700 dark:text-orange-300"><ClipboardList className="h-5 w-5" aria-hidden="true" /><span className="text-[10px] font-black uppercase tracking-[0.14em]">Today</span></div>
+              <div className="mt-3 text-3xl font-black tabular-nums tracking-tight text-slate-950 dark:text-slate-100">{stats.todayTotalOrders}</div>
+              <div className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-400">Orders received</div>
             </div>
-            <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-br from-white to-emerald-50/30 px-4 py-3 text-center shadow-sm ring-1 ring-emerald-100/60">
-              <div className="text-xl font-bold tabular-nums text-slate-900">
-                ₹{stats.todayRevenue.toFixed(0)}
-              </div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Today&apos;s revenue
-              </div>
+            <div className="h-[124px] rounded-3xl border border-orange-200/80 bg-white p-3 shadow-sm dark:border-orange-900/70 dark:bg-slate-900 sm:h-[132px] sm:p-4">
+              <div className="flex items-center justify-between gap-2 text-orange-700 dark:text-orange-300"><Activity className="h-5 w-5" aria-hidden="true" /><span className="text-[10px] font-black uppercase tracking-[0.14em]">Now</span></div>
+              <div className="mt-3 text-3xl font-black tabular-nums tracking-tight text-orange-950 dark:text-orange-200">{stats.total}</div>
+              <div className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-400">Active on board</div>
             </div>
-            <div className="rounded-2xl border border-orange-200/80 bg-white/90 px-4 py-3 text-center shadow-sm">
-              <div className="text-xl font-bold tabular-nums text-orange-900">
-                {stats.total}
-              </div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Active on board
-              </div>
+            <div className="h-[124px] rounded-3xl border border-sky-200/80 bg-white p-3 shadow-sm dark:border-sky-900/70 dark:bg-slate-900 sm:h-[132px] sm:p-4">
+              <div className="flex items-center justify-between gap-2 text-sky-700 dark:text-sky-300"><ListChecks className="h-5 w-5" aria-hidden="true" /><span className="text-[10px] font-black uppercase tracking-[0.14em]">Next</span></div>
+              <div className="mt-3 text-3xl font-black tabular-nums tracking-tight text-slate-950 dark:text-slate-100">{stats.queue}</div>
+              <div className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-400">In the queue</div>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-center shadow-sm">
-              <div className="text-xl font-bold tabular-nums text-slate-900">
-                {stats.queue}
-              </div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Queue
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-center shadow-sm">
-              <div className="text-xl font-bold tabular-nums text-slate-900">
-                {stats.preparing}
-              </div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Preparing
-              </div>
+            <div className="h-[124px] rounded-3xl border border-amber-200/80 bg-white p-3 shadow-sm dark:border-amber-900/70 dark:bg-slate-900 sm:h-[132px] sm:p-4">
+              <div className="flex items-center justify-between gap-2 text-amber-700 dark:text-amber-300"><Utensils className="h-5 w-5" aria-hidden="true" /><span className="text-[10px] font-black uppercase tracking-[0.14em]">Cook</span></div>
+              <div className="mt-3 text-3xl font-black tabular-nums tracking-tight text-slate-950 dark:text-slate-100">{stats.preparing}</div>
+              <div className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-400">Being prepared</div>
             </div>
           </div>
+          <div className="order-1 relative overflow-hidden rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-teal-50 to-white p-5 text-emerald-950 shadow-[0_16px_36px_-18px_rgba(6,78,59,0.24)] dark:border-emerald-700 dark:from-emerald-950 dark:via-emerald-900 dark:to-teal-900 dark:text-white dark:shadow-[0_16px_36px_-18px_rgba(6,78,59,0.65)] sm:p-6 lg:order-2">
+            <div className="absolute -right-10 -top-12 h-36 w-36 rounded-full bg-emerald-300/30 blur-2xl dark:bg-emerald-300/15" />
+            <div className="relative flex h-full flex-col justify-between gap-7">
+                <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-100"><IndianRupee className="h-4 w-4 text-emerald-600 dark:text-emerald-200" aria-hidden="true" /><span className="text-[11px] font-black uppercase tracking-[0.16em]">Revenue desk</span></div><p className="mt-2 text-sm font-medium text-emerald-700 dark:text-emerald-100/80">Revenue today</p></div><ArrowUpRight className="h-5 w-5 text-emerald-700 dark:text-emerald-200" aria-hidden="true" /></div>
+              <div><div className="text-4xl font-black tabular-nums tracking-tight sm:text-5xl">₹{stats.todayRevenue.toFixed(0)}</div><div className="mt-5 flex flex-wrap items-end justify-between gap-3 border-t border-emerald-200 pt-4 dark:border-white/15"><div><div className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700/75 dark:text-emerald-200/75">{formatMonthLabel()} · MTD</div><div className="mt-1 text-2xl font-extrabold tabular-nums">₹{stats.monthRevenue.toFixed(0)}</div></div><div className="rounded-full bg-emerald-100 px-3 py-1.5 text-[11px] font-bold text-emerald-800 dark:bg-white/10 dark:text-emerald-100">Excludes rejected</div></div></div>
+            </div>
+          </div>
+        </section>
+
+        <div className="flex w-full flex-wrap items-center justify-between gap-3">
           <div
             role="status"
             aria-live="polite"
@@ -1767,25 +1817,28 @@ export default function KitchenPage() {
             variant="outline"
             onClick={() => loadKitchenData({ forceStatic: true })}
             disabled={!cafeId || loading}
-            className="min-w-[110px]"
+            className="min-h-[42px] min-w-[110px]"
           >
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
             Refresh
           </Button>
           <Button
             type="button"
             variant="outline"
-            className="min-w-[140px] text-xs sm:text-sm"
+            className="min-h-[42px] min-w-[140px] text-xs sm:text-sm"
             onClick={() => requestNotificationPermission()}
           >
+            <BellRing className="mr-2 h-4 w-4" aria-hidden="true" />
             Enable alerts
           </Button>
           <Link
             href="/kitchen/history"
-            className="inline-flex items-center rounded-full border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-800 shadow-sm hover:bg-orange-50"
+            className="inline-flex min-h-[42px] items-center rounded-full border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-800 shadow-sm hover:bg-orange-50 dark:border-orange-800 dark:bg-slate-900 dark:text-orange-300 dark:hover:bg-slate-800"
           >
             History
           </Link>
           <Button
+            className="min-h-[42px]"
             onClick={openNewOrderEditor}
             disabled={!cafeId || menuLoading}
           >
@@ -1794,7 +1847,7 @@ export default function KitchenPage() {
           <Button
             type="button"
             variant="outline"
-            className="border-amber-300 text-amber-800 hover:bg-amber-50"
+            className="min-h-[42px] border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-950/40"
             onClick={() => {
               setKitchenTab("cigarettes");
               window.setTimeout(() => document.getElementById("cigarette-counter")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
