@@ -823,12 +823,12 @@ exports.createStaffOrder = async (req, res) => {
       phone = "";
     } else {
       if (!customerName) return res.status(400).json({ message: "customerName is required for manual orders" });
-      if (!isValidPhone(rawPhone)) {
+      if (rawPhone && !isValidPhone(rawPhone)) {
         return res.status(400).json({ message: "phone must contain 7 to 15 digits" });
       }
     }
 
-    const linkedCustomer = orderType === "food"
+    const linkedCustomer = orderType === "food" && phone
       ? await upsertCustomerFromOrder({ phone, name: customerName, tableNumber, cafeId })
       : null;
 

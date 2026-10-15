@@ -33,6 +33,7 @@ const envOrigins = (process.env.CORS_ORIGINS || "")
 
 const allowedOrigins = [
   "http://localhost:5000",
+  "http://localhost:5001",
   "http://localhost:3000",
   "https://cafe-qr-based-software.onrender.com",
   "https://www.coffeeculturenagpur.com",

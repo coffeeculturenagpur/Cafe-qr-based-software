@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -105,6 +105,7 @@ export default function RoleLoginCard({
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 placeholder="Email or username"
+                autoComplete="username"
                 required
               />
               <Input
@@ -112,6 +113,7 @@ export default function RoleLoginCard({
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
                 type="password"
+                autoComplete="current-password"
                 required
               />
               {error && <div className="text-red-600 text-sm font-semibold">{error}</div>}

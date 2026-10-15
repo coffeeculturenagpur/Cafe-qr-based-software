@@ -32,8 +32,9 @@ const orderSchema = new mongoose.Schema(
     phone: {
       type: String,
       required: function requiredCustomerPhone() {
-        return this.orderType !== "cigarette";
+        return this.orderType !== "cigarette" && this.source !== "manual";
       },
+      default: "",
       trim: true,
     },
     notes: { type: String, trim: true, default: "" },

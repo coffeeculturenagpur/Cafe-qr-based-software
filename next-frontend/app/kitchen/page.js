@@ -38,6 +38,7 @@ import {
 } from "../../lib/orderTiming";
 import { TableStatusPad } from "../../components/staff/TableStatusPad";
 import { CigarettePanel } from "../../components/staff/CigarettePanel";
+import { MobileTableOrderingSheet } from "../../components/staff/MobileTableOrderingSheet";
 import {
   ChevronDown,
   ClipboardList,
@@ -264,6 +265,9 @@ export default function KitchenPage() {
   const [selectedTableKey, setSelectedTableKey] = useState("");
   const [blinkingTables, setBlinkingTables] = useState({});
   const [kitchenTab, setKitchenTab] = useState("kitchen");
+  const [mobileOrderingTable, setMobileOrderingTable] = useState(null);
+  const [mobileOrderingStatus, setMobileOrderingStatus] = useState("free");
+  const [mobileOrderingOpen, setMobileOrderingOpen] = useState(false);
   const tableCardRefs = useRef({});
   const pendingAlertOrderIdsRef = useRef(new Set());
   const alertTimeoutRef = useRef(null);
@@ -1541,8 +1545,7 @@ export default function KitchenPage() {
     // tickets so the cigarette panel can keep handling those separately.
     if (!isCigaretteOrder) {
       if (!customerName) return { error: "Customer name is required for a manual order" };
-      if (!phone) return { error: "Phone number is required for a manual order" };
-      if (!/^\d{10}$/.test(phone)) return { error: "Enter a valid 10-digit phone number" };
+      if (phone && !/^\d{10}$/.test(phone)) return { error: "Enter a valid 10-digit phone number" };
     }
 
     return {
@@ -1588,6 +1591,43 @@ export default function KitchenPage() {
       }
     }, 160);
   }, []);
+
+  const handleDialPadTableSelect = useCallback(
+    (tableSelection) => {
+      const tableNumber = Number(tableSelection?.tableNumber || 0);
+      const isMobile = typeof window !== "undefined" && window.innerWidth < 1024;
+
+      if (isMobile) {
+        if (tableNumber > 0) {
+          setMobileOrderingTable(tableNumber);
+          setMobileOrderingStatus(tableSelection?.status || "free");
+          setMobileOrderingOpen(true);
+          setBlinkingTables((prev) => ({ ...prev, [tableNumber]: false }));
+        }
+      } else {
+        openTableOrders(tableSelection);
+      }
+    },
+    [openTableOrders],
+  );
+
+  const handleMobileOrderCreated = (updated) => {
+    setBusinessDayOrders((prev) => upsertOrder(prev, updated));
+    setTodayOrders((prev) => upsertOrder(prev, updated));
+    setMonthOrders((prev) => upsertOrder(prev, updated));
+    if (isKitchenLiveOrder(updated)) {
+      setOrders((prev) => upsertOrder(prev, updated));
+    }
+    setLastCreatedOrder(updated);
+  };
+
+  const mobileSelectedTableExistingOrders = useMemo(() => {
+    if (!mobileOrderingTable) return [];
+    const group = groupedOrders.find(
+      (g) => Number(g.tableNumber) === Number(mobileOrderingTable),
+    );
+    return group?.orders || [];
+  }, [groupedOrders, mobileOrderingTable]);
 
   const addDraftItem = (menuItemId) => {
     const resolvedMenuItemId = menuItemId
@@ -1752,39 +1792,95 @@ export default function KitchenPage() {
       contentClassName="w-full max-w-none pb-10"
     >
       <div className="space-y-6">
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(18rem,0.9fr)]" aria-label="Kitchen overview">
-          <div className="order-2 grid grid-cols-1 items-start gap-3 self-start sm:grid-cols-2 lg:order-1">
-            <div className="h-[124px] rounded-3xl border border-orange-200/80 bg-gradient-to-br from-white to-orange-50/70 p-3 shadow-sm dark:border-orange-900/70 dark:from-slate-900 dark:to-orange-950/30 sm:h-[132px] sm:p-4">
-              <div className="flex items-center justify-between gap-2 text-orange-700 dark:text-orange-300"><ClipboardList className="h-5 w-5" aria-hidden="true" /><span className="text-[10px] font-black uppercase tracking-[0.14em]">Today</span></div>
-              <div className="mt-3 text-3xl font-black tabular-nums tracking-tight text-slate-950 dark:text-slate-100">{stats.todayTotalOrders}</div>
-              <div className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-400">Orders received</div>
+        <section className="grid gap-3 sm:gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(18rem,0.9fr)]" aria-label="Kitchen overview">
+          <div className="order-2 grid grid-cols-2 items-start gap-2.5 self-start sm:gap-3 lg:order-1">
+            <div className="min-h-[105px] rounded-2xl border border-orange-200/80 bg-gradient-to-br from-white to-orange-50/70 p-2.5 shadow-sm dark:border-orange-900/70 dark:from-slate-900 dark:to-orange-950/30 sm:min-h-[132px] sm:rounded-3xl sm:p-4">
+              <div className="flex items-center justify-between gap-1.5 text-orange-700 dark:text-orange-300">
+                <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true" />
+                <span className="text-[10px] font-black uppercase tracking-[0.14em]">Today</span>
+              </div>
+              <div className="mt-2 text-2xl font-black tabular-nums tracking-tight text-slate-950 dark:text-slate-100 sm:mt-3 sm:text-3xl">
+                {stats.todayTotalOrders}
+              </div>
+              <div className="mt-1 text-[11px] font-bold text-slate-600 dark:text-slate-400 sm:text-xs">
+                Orders received
+              </div>
             </div>
-            <div className="h-[124px] rounded-3xl border border-orange-200/80 bg-white p-3 shadow-sm dark:border-orange-900/70 dark:bg-slate-900 sm:h-[132px] sm:p-4">
-              <div className="flex items-center justify-between gap-2 text-orange-700 dark:text-orange-300"><Activity className="h-5 w-5" aria-hidden="true" /><span className="text-[10px] font-black uppercase tracking-[0.14em]">Now</span></div>
-              <div className="mt-3 text-3xl font-black tabular-nums tracking-tight text-orange-950 dark:text-orange-200">{stats.total}</div>
-              <div className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-400">Active on board</div>
+            <div className="min-h-[105px] rounded-2xl border border-orange-200/80 bg-white p-2.5 shadow-sm dark:border-orange-900/70 dark:bg-slate-900 sm:min-h-[132px] sm:rounded-3xl sm:p-4">
+              <div className="flex items-center justify-between gap-1.5 text-orange-700 dark:text-orange-300">
+                <Activity className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true" />
+                <span className="text-[10px] font-black uppercase tracking-[0.14em]">Now</span>
+              </div>
+              <div className="mt-2 text-2xl font-black tabular-nums tracking-tight text-orange-950 dark:text-orange-200 sm:mt-3 sm:text-3xl">
+                {stats.total}
+              </div>
+              <div className="mt-1 text-[11px] font-bold text-slate-600 dark:text-slate-400 sm:text-xs">
+                Active on board
+              </div>
             </div>
-            <div className="h-[124px] rounded-3xl border border-sky-200/80 bg-white p-3 shadow-sm dark:border-sky-900/70 dark:bg-slate-900 sm:h-[132px] sm:p-4">
-              <div className="flex items-center justify-between gap-2 text-sky-700 dark:text-sky-300"><ListChecks className="h-5 w-5" aria-hidden="true" /><span className="text-[10px] font-black uppercase tracking-[0.14em]">Next</span></div>
-              <div className="mt-3 text-3xl font-black tabular-nums tracking-tight text-slate-950 dark:text-slate-100">{stats.queue}</div>
-              <div className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-400">In the queue</div>
+            <div className="min-h-[105px] rounded-2xl border border-sky-200/80 bg-white p-2.5 shadow-sm dark:border-sky-900/70 dark:bg-slate-900 sm:min-h-[132px] sm:rounded-3xl sm:p-4">
+              <div className="flex items-center justify-between gap-1.5 text-sky-700 dark:text-sky-300">
+                <ListChecks className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true" />
+                <span className="text-[10px] font-black uppercase tracking-[0.14em]">Next</span>
+              </div>
+              <div className="mt-2 text-2xl font-black tabular-nums tracking-tight text-slate-950 dark:text-slate-100 sm:mt-3 sm:text-3xl">
+                {stats.queue}
+              </div>
+              <div className="mt-1 text-[11px] font-bold text-slate-600 dark:text-slate-400 sm:text-xs">
+                In the queue
+              </div>
             </div>
-            <div className="h-[124px] rounded-3xl border border-amber-200/80 bg-white p-3 shadow-sm dark:border-amber-900/70 dark:bg-slate-900 sm:h-[132px] sm:p-4">
-              <div className="flex items-center justify-between gap-2 text-amber-700 dark:text-amber-300"><Utensils className="h-5 w-5" aria-hidden="true" /><span className="text-[10px] font-black uppercase tracking-[0.14em]">Cook</span></div>
-              <div className="mt-3 text-3xl font-black tabular-nums tracking-tight text-slate-950 dark:text-slate-100">{stats.preparing}</div>
-              <div className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-400">Being prepared</div>
+            <div className="min-h-[105px] rounded-2xl border border-amber-200/80 bg-white p-2.5 shadow-sm dark:border-amber-900/70 dark:bg-slate-900 sm:min-h-[132px] sm:rounded-3xl sm:p-4">
+              <div className="flex items-center justify-between gap-1.5 text-amber-700 dark:text-amber-300">
+                <Utensils className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true" />
+                <span className="text-[10px] font-black uppercase tracking-[0.14em]">Cook</span>
+              </div>
+              <div className="mt-2 text-2xl font-black tabular-nums tracking-tight text-slate-950 dark:text-slate-100 sm:mt-3 sm:text-3xl">
+                {stats.preparing}
+              </div>
+              <div className="mt-1 text-[11px] font-bold text-slate-600 dark:text-slate-400 sm:text-xs">
+                Being prepared
+              </div>
             </div>
           </div>
-          <div className="order-1 relative overflow-hidden rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-teal-50 to-white p-5 text-emerald-950 shadow-[0_16px_36px_-18px_rgba(6,78,59,0.24)] dark:border-emerald-700 dark:from-emerald-950 dark:via-emerald-900 dark:to-teal-900 dark:text-white dark:shadow-[0_16px_36px_-18px_rgba(6,78,59,0.65)] sm:p-6 lg:order-2">
+          <div className="order-1 relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-teal-50 to-white p-4 text-emerald-950 shadow-[0_16px_36px_-18px_rgba(6,78,59,0.24)] dark:border-emerald-700 dark:from-emerald-950 dark:via-emerald-900 dark:to-teal-900 dark:text-white dark:shadow-[0_16px_36px_-18px_rgba(6,78,59,0.65)] sm:rounded-3xl sm:p-6 lg:order-2">
             <div className="absolute -right-10 -top-12 h-36 w-36 rounded-full bg-emerald-300/30 blur-2xl dark:bg-emerald-300/15" />
-            <div className="relative flex h-full flex-col justify-between gap-7">
-                <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-100"><IndianRupee className="h-4 w-4 text-emerald-600 dark:text-emerald-200" aria-hidden="true" /><span className="text-[11px] font-black uppercase tracking-[0.16em]">Revenue desk</span></div><p className="mt-2 text-sm font-medium text-emerald-700 dark:text-emerald-100/80">Revenue today</p></div><ArrowUpRight className="h-5 w-5 text-emerald-700 dark:text-emerald-200" aria-hidden="true" /></div>
-              <div><div className="text-4xl font-black tabular-nums tracking-tight sm:text-5xl">₹{stats.todayRevenue.toFixed(0)}</div><div className="mt-5 flex flex-wrap items-end justify-between gap-3 border-t border-emerald-200 pt-4 dark:border-white/15"><div><div className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700/75 dark:text-emerald-200/75">{formatMonthLabel()} · MTD</div><div className="mt-1 text-2xl font-extrabold tabular-nums">₹{stats.monthRevenue.toFixed(0)}</div></div><div className="rounded-full bg-emerald-100 px-3 py-1.5 text-[11px] font-bold text-emerald-800 dark:bg-white/10 dark:text-emerald-100">Excludes rejected</div></div></div>
+            <div className="relative flex h-full flex-col justify-between gap-4 sm:gap-7">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-100">
+                    <IndianRupee className="h-4 w-4 text-emerald-600 dark:text-emerald-200" aria-hidden="true" />
+                    <span className="text-[11px] font-black uppercase tracking-[0.16em]">Revenue desk</span>
+                  </div>
+                  <p className="mt-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-100/80 sm:mt-2 sm:text-sm">
+                    Revenue today
+                  </p>
+                </div>
+                <ArrowUpRight className="h-5 w-5 text-emerald-700 dark:text-emerald-200" aria-hidden="true" />
+              </div>
+              <div>
+                <div className="text-3xl font-black tabular-nums tracking-tight sm:text-5xl">
+                  ₹{stats.todayRevenue.toFixed(0)}
+                </div>
+                <div className="mt-3 flex flex-wrap items-end justify-between gap-2 border-t border-emerald-200 pt-3 dark:border-white/15 sm:mt-5 sm:gap-3 sm:pt-4">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700/75 dark:text-emerald-200/75">
+                      {formatMonthLabel()} · MTD
+                    </div>
+                    <div className="mt-0.5 text-xl font-extrabold tabular-nums sm:mt-1 sm:text-2xl">
+                      ₹{stats.monthRevenue.toFixed(0)}
+                    </div>
+                  </div>
+                  <div className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-800 dark:bg-white/10 dark:text-emerald-100 sm:px-3 sm:py-1.5 sm:text-[11px]">
+                    Excludes rejected
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <div className="flex w-full flex-wrap items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:gap-3">
           <div
             role="status"
             aria-live="polite"
@@ -1856,7 +1952,22 @@ export default function KitchenPage() {
             Manual cigarette order
           </Button>
         </div>
-        <div>
+
+        {/* ── Mobile View: Table Dial Pad shown right after revenue/toolbar ── */}
+        <div className="block lg:hidden">
+          <TableStatusPad
+            title="Table dial pad"
+            subtitle="Click a table number to open counter-based ordering."
+            totalTables={cafeInfo?.numberOfTables}
+            groups={groupedOrders}
+            expandedTables={expandedTables}
+            onSelectTable={handleDialPadTableSelect}
+            blinkingTableNumbers={blinkingTables}
+            selectedTableNumber={selectedGroup?.tableNumber}
+          />
+        </div>
+
+        <div className="hidden lg:block">
           <h2 className="font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             Quick order
           </h2>
@@ -2018,8 +2129,8 @@ export default function KitchenPage() {
           </div>
         ) : (
           <>
-        {/* ── Category grid ── */}
-        <div className="grid min-w-0 items-start gap-4 overflow-x-hidden sm:gap-6 2xl:items-stretch 2xl:grid-cols-[minmax(0,1.7fr)_minmax(24rem,0.75fr)]">
+        {/* ── Category grid (Desktop view only, hidden on mobile) ── */}
+        <div className="hidden lg:grid min-w-0 items-start gap-4 overflow-x-hidden sm:gap-6 2xl:items-stretch 2xl:grid-cols-[minmax(0,1.7fr)_minmax(24rem,0.75fr)]">
         <div className="min-w-0 max-w-full rounded-2xl border border-dashed border-orange-200/70 bg-white/55 p-3 shadow-sm backdrop-blur-sm sm:p-4 dark:border-white/[0.06] dark:bg-slate-900/40">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -2563,16 +2674,19 @@ export default function KitchenPage() {
           <div className="text-red-700 font-semibold">{menuError}</div>
         )}
 
-        <TableStatusPad
-          title="Table dial pad"
-          subtitle="Blinking tables have new activity. Click a table number to open its orders in a popup."
-          totalTables={cafeInfo?.numberOfTables}
-          groups={groupedOrders}
-          expandedTables={expandedTables}
-          onSelectTable={openTableOrders}
-          blinkingTableNumbers={blinkingTables}
-          selectedTableNumber={selectedGroup?.tableNumber}
-        />
+        {/* ── Desktop View: Table Dial Pad kept in original position ── */}
+        <div className="hidden lg:block">
+          <TableStatusPad
+            title="Table dial pad"
+            subtitle="Blinking tables have new activity. Click a table number to open its orders in a popup."
+            totalTables={cafeInfo?.numberOfTables}
+            groups={groupedOrders}
+            expandedTables={expandedTables}
+            onSelectTable={handleDialPadTableSelect}
+            blinkingTableNumbers={blinkingTables}
+            selectedTableNumber={selectedGroup?.tableNumber}
+          />
+        </div>
 
         {walkInGroup ? (
           <section className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50 p-4 shadow-sm sm:p-5">
@@ -3980,6 +4094,20 @@ export default function KitchenPage() {
           </div>
         </div>
       ) : null}
+
+      {/* ── Mobile Counter Ordering Sheet ── */}
+      <MobileTableOrderingSheet
+        isOpen={mobileOrderingOpen}
+        onClose={() => setMobileOrderingOpen(false)}
+        tableNumber={mobileOrderingTable}
+        tableStatus={mobileOrderingStatus}
+        existingOrders={mobileSelectedTableExistingOrders}
+        menuItems={menuItems}
+        cafeInfo={cafeInfo}
+        token={token}
+        onOrderCreated={handleMobileOrderCreated}
+        onPrintReceipt={(order, billType) => printReceipt(order, billType)}
+      />
     </StaffShell>
   );
 }
