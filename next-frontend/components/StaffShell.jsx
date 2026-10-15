@@ -105,9 +105,9 @@ export function StaffShell({
 
   return (
     <div className={`page-shell relative min-h-screen overflow-x-hidden ${className}`}>
-      <div className="pointer-events-none absolute inset-0 bg-grid opacity-30" />
-      <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-orange-300/30 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-0 -left-24 h-72 w-72 rounded-full bg-emerald-300/20 blur-3xl" />
+      <div className="pointer-events-none fixed inset-0 bg-grid opacity-15" />
+      <div className="pointer-events-none fixed -right-20 -top-24 h-64 w-64 rounded-full bg-amber-500/10 blur-3xl" />
+      <div className="pointer-events-none fixed bottom-10 -left-24 h-72 w-72 rounded-full bg-amber-600/10 blur-3xl" />
       <div className={`relative mx-auto w-full ${wide ? "max-w-[1800px]" : "max-w-7xl"} px-3 py-3 sm:px-5 sm:py-4 lg:px-8 ${dense ? "py-3" : ""}`}>
         <header
           className={`mb-4 flex flex-col gap-3 border-b border-slate-200/80 pb-4 sm:mb-6 sm:flex-row sm:items-end sm:justify-between ${toolbarClassName}`}
