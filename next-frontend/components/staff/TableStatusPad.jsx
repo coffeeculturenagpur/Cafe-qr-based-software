@@ -121,7 +121,7 @@ export function TableStatusPad({
         })}
       </div>
 
-      <div className="mx-auto mt-4 grid max-w-[22rem] grid-cols-3 gap-2.5 sm:max-w-[24rem] sm:gap-3 lg:max-w-[56rem] lg:grid-cols-6">
+      <div className="mx-auto mt-4 grid w-full max-w-full grid-cols-3 gap-2.5 sm:grid-cols-3 md:grid-cols-6 sm:gap-3">
         {Array.from({ length: displayCount }, (_, index) => {
           const tableNumber = index + 1;
           const entry = activeTables.get(tableNumber);
@@ -153,7 +153,7 @@ export function TableStatusPad({
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900",
                 isActive ? "shadow-[0_12px_30px_-14px_rgba(15,23,42,0.35)]" : "shadow-sm",
                 isExpanded ? "ring-2 ring-slate-900/20 ring-offset-2" : "",
-                isSelected ? "ring-2 ring-slate-950 ring-offset-2" : "",
+                isSelected ? "ring-4 ring-orange-500 ring-offset-2 scale-[1.03] shadow-md dark:ring-orange-400 dark:ring-offset-slate-900" : "",
                 isBlinking ? "animate-pulse" : "",
                 !isActive ? "hover:border-slate-300 hover:bg-white dark:hover:border-slate-600 dark:hover:bg-slate-800" : "",
               ].join(" ")}

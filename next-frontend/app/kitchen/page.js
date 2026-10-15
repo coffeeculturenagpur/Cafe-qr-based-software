@@ -46,6 +46,7 @@ import {
   X,
   Check,
   Printer,
+  Receipt,
   StickyNote,
   CheckCircle2,
   Activity,
@@ -1605,10 +1606,26 @@ export default function KitchenPage() {
           setBlinkingTables((prev) => ({ ...prev, [tableNumber]: false }));
         }
       } else {
-        openTableOrders(tableSelection);
+        if (tableNumber > 0) {
+          // If clicking a table that is already selected and has active orders, open table orders modal
+          if (
+            Number(quickOrderDraft.tableNumber) === tableNumber &&
+            tableSelection?.hasOrders
+          ) {
+            openTableOrders(tableSelection);
+            return;
+          }
+
+          if (lastConfirmedQuickOrder) setLastConfirmedQuickOrder(null);
+          setQuickOrderDraft((prev) => ({
+            ...prev,
+            tableNumber: String(tableNumber),
+          }));
+          setBlinkingTables((prev) => ({ ...prev, [tableNumber]: false }));
+        }
       }
     },
-    [openTableOrders],
+    [openTableOrders, lastConfirmedQuickOrder, quickOrderDraft.tableNumber],
   );
 
   const handleMobileOrderCreated = (updated) => {
@@ -1628,6 +1645,12 @@ export default function KitchenPage() {
     );
     return group?.orders || [];
   }, [groupedOrders, mobileOrderingTable]);
+
+  const desktopSelectedTableGroup = useMemo(() => {
+    const num = Number(quickOrderDraft.tableNumber || 0);
+    if (!num) return null;
+    return groupedOrders.find((g) => Number(g.tableNumber) === num) || null;
+  }, [groupedOrders, quickOrderDraft.tableNumber]);
 
   const addDraftItem = (menuItemId) => {
     const resolvedMenuItemId = menuItemId
@@ -1967,14 +1990,6 @@ export default function KitchenPage() {
           />
         </div>
 
-        <div className="hidden lg:block">
-          <h2 className="font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Quick order
-          </h2>
-          <div className="mt-1 text-sm text-slate-600">
-            Tap a category to browse and add items to the bill.
-          </div>
-        </div>
 
         {/* ── Last Created Order / Success Notification Banner ── */}
         {lastCreatedOrder && (
@@ -2129,14 +2144,344 @@ export default function KitchenPage() {
           </div>
         ) : (
           <>
-        {/* ── Category grid (Desktop view only, hidden on mobile) ── */}
-        <div className="hidden lg:grid min-w-0 items-start gap-4 overflow-x-hidden sm:gap-6 2xl:items-stretch 2xl:grid-cols-[minmax(0,1.7fr)_minmax(24rem,0.75fr)]">
-        <div className="min-w-0 max-w-full rounded-2xl border border-dashed border-orange-200/70 bg-white/55 p-3 shadow-sm backdrop-blur-sm sm:p-4 dark:border-white/[0.06] dark:bg-slate-900/40">
+        {/* ── Desktop Top Row: Table Dial Pad (Left) & Checkout Panel (Right) ── */}
+        <div className="hidden lg:grid min-w-0 items-start gap-4 overflow-x-hidden sm:gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(24rem,0.95fr)]">
+          {/* Table Dial Pad */}
+          <div className="min-w-0">
+            <TableStatusPad
+              title="Table dial pad"
+              subtitle="Click a table number to select for counter ordering or view orders."
+              totalTables={cafeInfo?.numberOfTables}
+              groups={groupedOrders}
+              expandedTables={expandedTables}
+              onSelectTable={handleDialPadTableSelect}
+              blinkingTableNumbers={blinkingTables}
+              selectedTableNumber={quickOrderDraft.tableNumber ? Number(quickOrderDraft.tableNumber) : (selectedGroup?.tableNumber || null)}
+            />
+          </div>
+
+          {/* Desktop Checkout Panel */}
+          <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-white/95 p-4 shadow-lg shadow-slate-200/40 ring-1 ring-slate-100/80 backdrop-blur-sm dark:border-white/[0.06] dark:bg-slate-900/95 dark:ring-white/[0.04]">
+            {quickOrderError && (
+              <div
+                className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
+                role="alert"
+              >
+                {quickOrderError}
+              </div>
+            )}
+
+            {/* Header */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                    Current order
+                  </div>
+                  {quickOrderDraft.tableNumber ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-black text-orange-900 dark:bg-orange-950/60 dark:text-orange-300">
+                      Table {quickOrderDraft.tableNumber}
+                      <button
+                        type="button"
+                        onClick={() => setQuickOrderDraft((prev) => ({ ...prev, tableNumber: "" }))}
+                        className="text-orange-700 hover:text-red-600 dark:text-orange-400"
+                        title="Clear table (switch to walk-in)"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                      Walk-in
+                    </span>
+                  )}
+                </div>
+                <div className="mt-0.5 text-lg font-black text-slate-900 dark:text-slate-100">
+                  Checkout
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {desktopSelectedTableGroup && desktopSelectedTableGroup.orders.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openTableOrders(desktopSelectedTableGroup)}
+                    className="h-8 text-xs font-bold"
+                  >
+                    View active ({desktopSelectedTableGroup.orders.length})
+                  </Button>
+                )}
+                <div className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-950/30 dark:text-emerald-400">
+                  {quickOrderDraftItemsDetailed.reduce((sum, item) => sum + item.qty, 0)} item
+                  {quickOrderDraftItemsDetailed.reduce((sum, item) => sum + item.qty, 0) === 1 ? "" : "s"}
+                </div>
+              </div>
+            </div>
+
+            {/* Confirmed Order Banner */}
+            {lastConfirmedQuickOrder && (
+              <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-xs font-semibold text-emerald-900 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
+                <span className="flex items-center gap-1.5">
+                  <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Order #{String(lastConfirmedQuickOrder._id || "").slice(-6).toUpperCase()} Confirmed!
+                </span>
+                <span className="text-[11px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                  Ready to print
+                </span>
+              </div>
+            )}
+
+            {/* Form Fields: Table, Customer Name, Phone, Notes */}
+            <div className="mt-3 space-y-2.5">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Table # <span className="font-normal normal-case">(optional)</span>
+                  <Input
+                    className="mt-1 h-9 text-sm"
+                    value={quickOrderDraft.tableNumber}
+                    onChange={(e) => {
+                      if (lastConfirmedQuickOrder) setLastConfirmedQuickOrder(null);
+                      setQuickOrderDraft((prev) => ({ ...prev, tableNumber: e.target.value }));
+                    }}
+                    placeholder="Table #"
+                    type="number"
+                    min="1"
+                    max={cafeInfo?.numberOfTables || undefined}
+                  />
+                </label>
+
+                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Phone <span className="font-normal normal-case">(optional)</span>
+                  <Input
+                    className="mt-1 h-9 text-sm"
+                    value={quickOrderDraft.phone}
+                    onChange={(e) => {
+                      if (lastConfirmedQuickOrder) setLastConfirmedQuickOrder(null);
+                      setQuickOrderDraft((prev) => ({ ...prev, phone: sanitizePhoneInput(e.target.value) }));
+                    }}
+                    placeholder="10-digit phone"
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={10}
+                  />
+                </label>
+              </div>
+
+              <div className="relative">
+                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Customer name <span className="text-red-600">*</span>
+                  <Input
+                    className="mt-1 h-9 text-sm"
+                    value={quickOrderDraft.customerName}
+                    onChange={(e) => {
+                      if (lastConfirmedQuickOrder) setLastConfirmedQuickOrder(null);
+                      setQuickOrderDraft((prev) => ({ ...prev, customerName: e.target.value }));
+                    }}
+                    placeholder="Enter or search customer"
+                    required
+                  />
+                </label>
+                {(customerSearchLoading || customerSuggestions.length > 0) && (
+                  <div className="relative z-30">
+                    <div className="absolute inset-x-0 top-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                      {customerSearchLoading ? (
+                        <div className="px-3 py-2 text-xs text-slate-500">Searching customers...</div>
+                      ) : (
+                        customerSuggestions.map((customer) => (
+                          <button
+                            key={customer.id}
+                            type="button"
+                            className="block w-full border-b border-slate-100 px-3 py-2 text-left last:border-0 hover:bg-orange-50 dark:border-slate-800 dark:hover:bg-slate-800"
+                            onClick={() => {
+                              setQuickOrderDraft((prev) => ({
+                                ...prev,
+                                customerName: customer.name || "",
+                                phone: customer.phone || prev.phone,
+                              }));
+                              setCustomerSuggestions([]);
+                            }}
+                          >
+                            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{customer.name}</div>
+                            <div className="text-xs text-slate-500">{customer.phone}</div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Order notes <span className="font-normal normal-case">(optional)</span>
+                <Input
+                  className="mt-1 h-9 text-sm"
+                  value={quickOrderDraft.notes || ""}
+                  onChange={(e) => {
+                    if (lastConfirmedQuickOrder) setLastConfirmedQuickOrder(null);
+                    setQuickOrderDraft((prev) => ({ ...prev, notes: e.target.value }));
+                  }}
+                  placeholder="Special instructions / notes"
+                />
+              </label>
+            </div>
+
+            {/* Selected Items List */}
+            <div className="mt-3 flex flex-col rounded-2xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800/80 dark:bg-slate-950/50">
+              <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-slate-800">
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">
+                  Selected items ({quickOrderDraftItemsDetailed.length})
+                </div>
+                {quickOrderDraftItemsDetailed.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearQuickOrderDraft}
+                    className="text-xs font-semibold text-slate-500 transition hover:text-red-600 dark:text-slate-400"
+                  >
+                    Clear items
+                  </button>
+                )}
+              </div>
+
+              {quickOrderDraftItemsDetailed.length ? (
+                <div className="mt-2.5 max-h-48 space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin]">
+                  {quickOrderDraftItemsDetailed.map((item) => (
+                    <div
+                      key={`${item.menuItemId}-${item.index}`}
+                      className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-bold text-slate-900 dark:text-slate-100">
+                          {item.menuItem.name}
+                        </div>
+                        <div className="text-[11px] tabular-nums font-semibold text-orange-700 dark:text-orange-400">
+                          ₹{item.lineTotal.toFixed(0)}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <div className="inline-flex h-8 items-stretch overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                          <button
+                            type="button"
+                            className="flex w-7 items-center justify-center border-r border-slate-200 bg-slate-50 text-sm font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+                            onClick={() => updateQuickOrderItem(item.index, { qty: Math.max(1, item.qty - 1) })}
+                          >
+                            -
+                          </button>
+                          <span className="flex w-8 items-center justify-center text-xs font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                            {item.qty}
+                          </span>
+                          <button
+                            type="button"
+                            className="flex w-7 items-center justify-center border-l border-slate-200 bg-slate-50 text-sm font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+                            onClick={() => updateQuickOrderItem(item.index, { qty: item.qty + 1 })}
+                          >
+                            +
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeQuickOrderItem(item.index)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-6 text-center">
+                  <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    No items added yet
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                    Tap items in Quick Order below to add to this bill.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Total & Action Buttons */}
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-orange-100 bg-orange-50/70 p-3 dark:border-orange-500/20 dark:bg-orange-950/20">
+              <div className="text-sm">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Total</div>
+                <div className="text-lg font-black tabular-nums text-slate-900 dark:text-slate-100">
+                  ₹{quickOrderEstimate.total.toFixed(2)}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {lastConfirmedQuickOrder ? (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => printReceipt(lastConfirmedQuickOrder, "chef")}
+                      iconLeft={<Printer className="h-3.5 w-3.5" />}
+                    >
+                      Print KOT
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => printReceipt(lastConfirmedQuickOrder, "customer")}
+                      iconLeft={<Receipt className="h-3.5 w-3.5" />}
+                    >
+                      Print Bill
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => printReceipt(lastConfirmedQuickOrder, "both")}
+                    >
+                      Both
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={clearQuickOrderDraft}
+                    >
+                      New
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={submitQuickOrderPreview}
+                      disabled={editorSaving || !quickOrderDraftItemsDetailed.length}
+                    >
+                      {editorSaving ? "Saving..." : "Confirm order"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={clearQuickOrderDraft}
+                      disabled={editorSaving}
+                    >
+                      Clear
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Desktop Bottom Row: Quick Order Section (below both Table Dial Pad & Checkout) ── */}
+        <section className="hidden lg:block min-w-0 max-w-full rounded-2xl border border-dashed border-orange-200/70 bg-white/55 p-4 shadow-sm backdrop-blur-sm sm:p-5 dark:border-white/[0.06] dark:bg-slate-900/40">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Menu items</div>
+              <div className="text-xl font-black text-slate-900 dark:text-slate-100">Quick order</div>
               <div className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                {quickOrderCategory === "All" ? "Most ordered items first" : quickOrderCategory}
+                Tap a category to browse and add items to the bill.
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -2186,11 +2531,11 @@ export default function KitchenPage() {
               />
               <div className="mt-3 max-h-[min(78vh,52rem)] overflow-y-auto pr-1 [scrollbar-width:thin]">
                 {menuLoading ? (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 2xl:grid-cols-3">
-                    {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-52 animate-pulse rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800/50" />)}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 sm:gap-5">
+                    {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-52 animate-pulse rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800/50" />)}
                   </div>
                 ) : quickOrderGridItems.length ? (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 2xl:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 sm:gap-5">
                     {quickOrderGridItems.map((item) => {
                       const selectedQty = quickOrderDraft.items.find((line) => String(line.menuItemId) === String(item._id || item.menuItemId))?.qty;
                       return (
@@ -2218,7 +2563,7 @@ export default function KitchenPage() {
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
         {/* ── Category item popup ── */}
         {quickOrderCategoryModal ? (
@@ -2314,261 +2659,6 @@ export default function KitchenPage() {
             </div>
           </div>
         ) : null}
-
-        {quickOrderDraftItemsDetailed.length ? (
-          <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-white/95 p-3 shadow-lg shadow-slate-200/40 ring-1 ring-slate-100/80 backdrop-blur-sm sm:p-4 dark:border-white/[0.06] dark:bg-slate-900/95 dark:ring-white/[0.04] 2xl:sticky 2xl:top-5 2xl:flex 2xl:max-h-[calc(100vh-2.5rem)] 2xl:flex-col">
-            {quickOrderError && (
-              <div
-                className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
-                role="alert"
-              >
-                {quickOrderError}
-              </div>
-            )}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Quick order preview
-                </div>
-                <div className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                  Table number is optional. Blank quick orders are saved as walk-in.
-                </div>
-              </div>
-              <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-950/30 dark:text-emerald-400">
-                {quickOrderDraftItemsDetailed.reduce((sum, item) => sum + item.qty, 0)} item
-                {quickOrderDraftItemsDetailed.reduce((sum, item) => sum + item.qty, 0) === 1 ? "" : "s"}
-              </div>
-            </div>
-
-            {lastConfirmedQuickOrder && (
-              <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-900 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
-                <span className="flex items-center gap-1.5">
-                  <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  Order #{String(lastConfirmedQuickOrder._id || "").slice(-6).toUpperCase()} Confirmed!
-                </span>
-                <span className="text-[11px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
-                  Ready to print
-                </span>
-              </div>
-            )}
-
-            <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-              <div className="shrink-0 space-y-3">
-                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Table number <span className="font-normal normal-case">(optional)</span>
-                  <Input
-                    className="mt-1.5"
-                    value={quickOrderDraft.tableNumber}
-                    onChange={(e) => {
-                      if (lastConfirmedQuickOrder) setLastConfirmedQuickOrder(null);
-                      setQuickOrderDraft((prev) => ({ ...prev, tableNumber: e.target.value }));
-                    }}
-                    placeholder="Table number"
-                    type="number"
-                    min="1"
-                    max={cafeInfo?.numberOfTables || undefined}
-                  />
-                </label>
-                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Customer name <span className="text-red-600">*</span>
-                  <Input
-                    className="mt-1.5"
-                    value={quickOrderDraft.customerName}
-                    onChange={(e) => {
-                      if (lastConfirmedQuickOrder) setLastConfirmedQuickOrder(null);
-                      setQuickOrderDraft((prev) => ({ ...prev, customerName: e.target.value }));
-                    }}
-                    placeholder="Customer name"
-                    required
-                  />
-                  {(customerSearchLoading || customerSuggestions.length > 0) && (
-                    <div className="relative z-30">
-                      <div className="absolute inset-x-0 top-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                        {customerSearchLoading ? (
-                          <div className="px-3 py-2 text-xs text-slate-500">Searching customers...</div>
-                        ) : (
-                          customerSuggestions.map((customer) => (
-                            <button
-                              key={customer.id}
-                              type="button"
-                              className="block w-full border-b border-slate-100 px-3 py-2 text-left last:border-0 hover:bg-orange-50 dark:border-slate-800 dark:hover:bg-slate-800"
-                              onClick={() => {
-                                setQuickOrderDraft((prev) => ({ ...prev, customerName: customer.name || "", phone: customer.phone || prev.phone }));
-                                setCustomerSuggestions([]);
-                              }}
-                            >
-                              <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{customer.name}</div>
-                              <div className="text-xs text-slate-500">{customer.phone}</div>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </label>
-                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Phone number <span className="text-red-600">*</span>
-                  <Input
-                    className="mt-1.5"
-                    value={quickOrderDraft.phone}
-                    onChange={(e) => {
-                      if (lastConfirmedQuickOrder) setLastConfirmedQuickOrder(null);
-                      setQuickOrderDraft((prev) => ({ ...prev, phone: sanitizePhoneInput(e.target.value) }));
-                    }}
-                    placeholder="Phone number"
-                    type="tel"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    minLength={10}
-                    maxLength={10}
-                    required
-                  />
-                </label>
-              </div>
-              <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800/80 dark:bg-slate-950/50">
-                <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-slate-800">
-                  <div className="text-sm font-semibold text-slate-900 dark:text-slate-200">Selected items</div>
-                  <button
-                    type="button"
-                    onClick={clearQuickOrderDraft}
-                    className="text-xs font-semibold text-slate-500 transition hover:text-red-600 dark:text-slate-400"
-                  >
-                    Clear
-                  </button>
-                </div>
-                <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin]">
-                  {quickOrderDraftItemsDetailed.map((item) => (
-                    <div
-                      key={`${item.menuItemId}-${item.index}`}
-                      className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0 flex-1">
-                          <div className="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100">
-                            {item.menuItem.name}
-                          </div>
-                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{formatMenuItemMeta(item.menuItem)}</div>
-                        </div>
-                        <Button type="button" variant="danger" size="sm" onClick={() => removeQuickOrderItem(item.index)}>
-                          Remove
-                        </Button>
-                      </div>
-                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/80 pt-3 dark:border-slate-800">
-                        <div className="inline-flex h-11 items-stretch overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-                          <button
-                            type="button"
-                            className="flex w-11 items-center justify-center border-r border-slate-200 bg-slate-50 text-lg font-semibold text-slate-700 transition hover:bg-slate-100 active:bg-slate-200 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                            aria-label="Decrease quantity"
-                            onClick={() => updateQuickOrderItem(item.index, { qty: Math.max(1, item.qty - 1) })}
-                          >
-                            -
-                          </button>
-                          <input
-                            type="number"
-                            min={1}
-                            inputMode="numeric"
-                            value={item.qty}
-                            onChange={(e) => {
-                              const n = Number(e.target.value);
-                              updateQuickOrderItem(item.index, {
-                                qty: Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1,
-                              });
-                            }}
-                            className="w-16 border-0 bg-white px-1 text-center text-base font-semibold tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-orange-200/90 dark:bg-slate-950 dark:text-slate-100"
-                          />
-                          <button
-                            type="button"
-                            className="flex w-11 items-center justify-center border-l border-slate-200 bg-slate-50 text-lg font-semibold text-slate-700 transition hover:bg-slate-100 active:bg-slate-200 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                            aria-label="Increase quantity"
-                            onClick={() => updateQuickOrderItem(item.index, { qty: item.qty + 1 })}
-                          >
-                            +
-                          </button>
-                        </div>
-                        <div className="text-sm font-bold tabular-nums text-slate-900 dark:text-slate-100">Rs {item.lineTotal.toFixed(2)}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-orange-100 bg-orange-50/70 px-4 py-3 dark:border-orange-500/20 dark:bg-orange-950/20">
-              <div className="text-sm text-slate-700 dark:text-slate-400">
-                <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Total</div>
-                <div className="font-bold text-slate-900 dark:text-slate-100">₹{quickOrderEstimate.total.toFixed(2)}</div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {lastConfirmedQuickOrder ? (
-                  <>
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        const printed = printReceipt(lastConfirmedQuickOrder, "both");
-                        if (printed) clearQuickOrderDraft();
-                      }}
-                      iconLeft={<Printer className="h-4 w-4" />}
-                    >
-                      Print Bill
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={clearQuickOrderDraft}
-                    >
-                      New Order
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      type="button"
-                      onClick={submitQuickOrderPreview}
-                      disabled={editorSaving || !quickOrderDraftItemsDetailed.length}
-                    >
-                      {editorSaving ? "Saving..." : "Confirm"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={clearQuickOrderDraft}
-                      disabled={editorSaving}
-                    >
-                      Clear
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-white/95 p-4 shadow-lg shadow-slate-200/40 ring-1 ring-slate-100/80 sm:p-5 dark:border-white/[0.06] dark:bg-slate-900/95 dark:ring-white/[0.04] 2xl:sticky 2xl:top-5">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
-              <div>
-                <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Current order</div>
-                <div className="mt-1 text-xl font-black text-slate-900 dark:text-slate-100">Checkout</div>
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400">
-                <ClipboardList className="h-5 w-5" />
-              </div>
-            </div>
-            <div className="flex min-h-[15rem] flex-col items-center justify-center py-8 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
-                <ClipboardList className="h-7 w-7" />
-              </div>
-              <div className="mt-4 text-sm font-bold text-slate-800 dark:text-slate-200">No items added yet</div>
-              <div className="mt-1 max-w-[16rem] text-xs leading-relaxed text-slate-500 dark:text-slate-400">Choose a category and add menu items to start a new order.</div>
-            </div>
-            <div className="border-t border-slate-100 pt-4 dark:border-slate-800">
-              <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
-                <span>Total</span>
-                <span className="text-lg font-black tabular-nums text-slate-900 dark:text-slate-100">₹0.00</span>
-              </div>
-              <Button type="button" className="mt-4 w-full" disabled>Confirm order</Button>
-            </div>
-          </div>
-        )}
-        </div>
 
         <div className="rounded-2xl border border-slate-200/90 bg-white/70 p-4 shadow-sm ring-1 ring-slate-100/80 backdrop-blur-sm dark:border-white/[0.06] dark:bg-slate-900/75 dark:ring-white/[0.04]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -2673,20 +2763,6 @@ export default function KitchenPage() {
         {menuError && (
           <div className="text-red-700 font-semibold">{menuError}</div>
         )}
-
-        {/* ── Desktop View: Table Dial Pad kept in original position ── */}
-        <div className="hidden lg:block">
-          <TableStatusPad
-            title="Table dial pad"
-            subtitle="Blinking tables have new activity. Click a table number to open its orders in a popup."
-            totalTables={cafeInfo?.numberOfTables}
-            groups={groupedOrders}
-            expandedTables={expandedTables}
-            onSelectTable={handleDialPadTableSelect}
-            blinkingTableNumbers={blinkingTables}
-            selectedTableNumber={selectedGroup?.tableNumber}
-          />
-        </div>
 
         {walkInGroup ? (
           <section className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50 p-4 shadow-sm sm:p-5">
