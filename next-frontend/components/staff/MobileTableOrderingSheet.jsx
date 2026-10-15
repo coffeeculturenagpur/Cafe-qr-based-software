@@ -42,6 +42,8 @@ export function MobileTableOrderingSheet({
   const [collapsedCategories, setCollapsedCategories] = useState({});
   const [customerSuggestions, setCustomerSuggestions] = useState([]);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const [isCustomerSelected, setIsCustomerSelected] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [confirmedOrder, setConfirmedOrder] = useState(null);
@@ -60,6 +62,8 @@ export function MobileTableOrderingSheet({
       setSearchQuery("");
       setCollapsedCategories({});
       setCustomerSuggestions([]);
+      setShowCustomerSuggestions(false);
+      setIsCustomerSelected(false);
       setErrorMsg("");
       setConfirmedOrder(null);
       setShowExistingOrders(false);
@@ -78,8 +82,13 @@ export function MobileTableOrderingSheet({
 
   // Customer suggestions autofill
   useEffect(() => {
+    if (isCustomerSelected || confirmedOrder) {
+      setCustomerSuggestions([]);
+      setCustomerSearchLoading(false);
+      return undefined;
+    }
     const query = customerName.trim();
-    if (!cafeId || query.length < 2 || confirmedOrder) {
+    if (!cafeId || query.length < 2) {
       setCustomerSuggestions([]);
       setCustomerSearchLoading(false);
       return undefined;
@@ -94,7 +103,9 @@ export function MobileTableOrderingSheet({
           headers: { ...(token ? authHeaders() : {}) },
         });
         if (!cancelled) {
-          setCustomerSuggestions(Array.isArray(data?.customers) ? data.customers : []);
+          const list = Array.isArray(data?.customers) ? data.customers : [];
+          setCustomerSuggestions(list);
+          if (list.length > 0) setShowCustomerSuggestions(true);
         }
       } catch {
         if (!cancelled) setCustomerSuggestions([]);
@@ -107,7 +118,7 @@ export function MobileTableOrderingSheet({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [cafeId, customerName, token, confirmedOrder]);
+  }, [cafeId, customerName, token, confirmedOrder, isCustomerSelected]);
 
   // Group menu items into categories
   const { categoryList, categoryMap } = useMemo(() => {
@@ -601,13 +612,25 @@ export function MobileTableOrderingSheet({
                 <div className="relative">
                   <Input
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    onChange={(e) => {
+                      setIsCustomerSelected(false);
+                      setShowCustomerSuggestions(true);
+                      setCustomerName(e.target.value);
+                    }}
+                    onFocus={() => {
+                      if (!isCustomerSelected && customerSuggestions.length > 0) {
+                        setShowCustomerSuggestions(true);
+                      }
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => setShowCustomerSuggestions(false), 200);
+                    }}
                     placeholder="Customer name *"
                     required
                     className="h-10 text-xs font-semibold"
                   />
                   {/* Customer Autofill Suggestions */}
-                  {(customerSearchLoading || customerSuggestions.length > 0) && (
+                  {showCustomerSuggestions && !isCustomerSelected && (customerSearchLoading || customerSuggestions.length > 0) && (
                     <div className="absolute inset-x-0 bottom-full z-50 mb-1 max-h-44 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
                       {customerSearchLoading ? (
                         <div className="px-3 py-2 text-[11px] text-slate-400">
@@ -618,10 +641,13 @@ export function MobileTableOrderingSheet({
                           <button
                             key={cust.id}
                             type="button"
+                            onMouseDown={(e) => e.preventDefault()}
                             onClick={() => {
+                              setIsCustomerSelected(true);
+                              setShowCustomerSuggestions(false);
+                              setCustomerSuggestions([]);
                               setCustomerName(cust.name || "");
                               if (cust.phone) setPhone(cust.phone);
-                              setCustomerSuggestions([]);
                             }}
                             className="block w-full border-b border-slate-100 px-3 py-2 text-left last:border-0 hover:bg-orange-50 dark:border-slate-800 dark:hover:bg-slate-800"
                           >

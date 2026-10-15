@@ -257,6 +257,8 @@ export default function KitchenPage() {
   const [quickOrderDraft, setQuickOrderDraft] = useState(() => createEmptyOrderDraft());
   const [customerSuggestions, setCustomerSuggestions] = useState([]);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const [isCustomerSelected, setIsCustomerSelected] = useState(false);
   const [quickOrderItemSearch, setQuickOrderItemSearch] = useState("");
   const [customerNotes, setCustomerNotes] = useState([]);
   const [noteDraft, setNoteDraft] = useState({ customerName: "", phone: "", amountDue: "", note: "" });
@@ -1002,6 +1004,11 @@ export default function KitchenPage() {
   };
 
   useEffect(() => {
+    if (isCustomerSelected) {
+      setCustomerSuggestions([]);
+      setCustomerSearchLoading(false);
+      return undefined;
+    }
     const query = String(quickOrderDraft.customerName || "").trim();
     if (!cafeId || query.length < 2) {
       setCustomerSuggestions([]);
@@ -1016,7 +1023,11 @@ export default function KitchenPage() {
         const data = await apiFetch(`/api/customers/search?${params.toString()}`, {
           headers: { ...(token ? authHeaders() : {}) },
         });
-        if (!cancelled) setCustomerSuggestions(Array.isArray(data?.customers) ? data.customers : []);
+        if (!cancelled) {
+          const list = Array.isArray(data?.customers) ? data.customers : [];
+          setCustomerSuggestions(list);
+          if (list.length > 0) setShowCustomerSuggestions(true);
+        }
       } catch {
         if (!cancelled) setCustomerSuggestions([]);
       } finally {
@@ -1027,12 +1038,15 @@ export default function KitchenPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [cafeId, quickOrderDraft.customerName, token]);
+  }, [cafeId, quickOrderDraft.customerName, token, isCustomerSelected]);
 
   const clearQuickOrderDraft = () => {
     setLastConfirmedQuickOrder(null);
     setQuickOrderDraft(createEmptyOrderDraft("pending"));
     setQuickOrderError("");
+    setCustomerSuggestions([]);
+    setShowCustomerSuggestions(false);
+    setIsCustomerSelected(false);
   };
 
   const addCustomerNote = (event) => {
@@ -2278,13 +2292,23 @@ export default function KitchenPage() {
                     value={quickOrderDraft.customerName}
                     onChange={(e) => {
                       if (lastConfirmedQuickOrder) setLastConfirmedQuickOrder(null);
+                      setIsCustomerSelected(false);
+                      setShowCustomerSuggestions(true);
                       setQuickOrderDraft((prev) => ({ ...prev, customerName: e.target.value }));
+                    }}
+                    onFocus={() => {
+                      if (!isCustomerSelected && customerSuggestions.length > 0) {
+                        setShowCustomerSuggestions(true);
+                      }
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => setShowCustomerSuggestions(false), 200);
                     }}
                     placeholder="Enter or search customer"
                     required
                   />
                 </label>
-                {(customerSearchLoading || customerSuggestions.length > 0) && (
+                {showCustomerSuggestions && !isCustomerSelected && (customerSearchLoading || customerSuggestions.length > 0) && (
                   <div className="relative z-30">
                     <div className="absolute inset-x-0 top-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
                       {customerSearchLoading ? (
@@ -2295,13 +2319,16 @@ export default function KitchenPage() {
                             key={customer.id}
                             type="button"
                             className="block w-full border-b border-slate-100 px-3 py-2 text-left last:border-0 hover:bg-orange-50 dark:border-slate-800 dark:hover:bg-slate-800"
+                            onMouseDown={(e) => e.preventDefault()}
                             onClick={() => {
+                              setIsCustomerSelected(true);
+                              setShowCustomerSuggestions(false);
+                              setCustomerSuggestions([]);
                               setQuickOrderDraft((prev) => ({
                                 ...prev,
                                 customerName: customer.name || "",
                                 phone: customer.phone || prev.phone,
                               }));
-                              setCustomerSuggestions([]);
                             }}
                           >
                             <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{customer.name}</div>
