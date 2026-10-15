@@ -1,6 +1,11 @@
+const path = require("path");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
   async rewrites() {
     // If the frontend isn't configured with an explicit API base URL,
     // proxy /api/* (and socket.io) to the local backend for dev convenience.
