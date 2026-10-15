@@ -2,7 +2,7 @@
 
 /**
  * Kitchen, waiter, admin: consistent top bar + content area on grid background.
- * Optional staffNav enables hamburger drawer with navigation and logout to /login.
+ * Optional staffNav enables hamburger drawer with navigation and logout to /login. ok
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
