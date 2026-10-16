@@ -1671,6 +1671,17 @@ export default function KitchenPage() {
 
       if (isMobile) {
         if (tableNumber > 0) {
+          // If table has a pending order (e.g. customer just scanned QR and ordered!),
+          // open Kitchen Order View immediately so staff can review and accept with 1 tap!
+          if (tableSelection?.status === "pending" || tableSelection?.hasOrders) {
+            const group = groupedOrders.find((g) => Number(g.tableNumber) === tableNumber);
+            if (group) {
+              openTableOrders(group);
+              setBlinkingTables((prev) => ({ ...prev, [tableNumber]: false }));
+              return;
+            }
+          }
+
           setMobileOrderingTable(tableNumber);
           setMobileOrderingStatus(tableSelection?.status || "free");
           setMobileOrderingOpen(true);
@@ -3470,15 +3481,15 @@ export default function KitchenPage() {
           </>
         )}
         {selectedGroup ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-[2px]">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-2 sm:p-4 backdrop-blur-[2px]">
             <button
               type="button"
               aria-label="Close table orders"
               className="absolute inset-0"
               onClick={() => setSelectedTableKey("")}
             />
-            <div className="relative z-10 max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-[2rem] border border-slate-200/90 bg-gradient-to-br from-white via-orange-50/30 to-slate-50 shadow-[0_30px_90px_-30px_rgba(15,23,42,0.45)]">
-              <div className="border-b border-slate-200/90 bg-white/85 px-5 py-5 backdrop-blur-sm">
+            <div className="relative z-10 max-h-[94vh] w-full max-w-5xl overflow-hidden rounded-2xl sm:rounded-[2rem] border border-slate-200/90 bg-gradient-to-br from-white via-orange-50/30 to-slate-50 shadow-[0_30px_90px_-30px_rgba(15,23,42,0.45)]">
+              <div className="border-b border-slate-200/90 bg-white/85 px-4 sm:px-5 py-4 sm:py-5 backdrop-blur-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-orange-700">
@@ -3493,13 +3504,29 @@ export default function KitchenPage() {
                         : "Guest"}
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    onClick={() => setSelectedTableKey("")}
-                    iconLeft={<X className="h-4 w-4" />}
-                  >
-                    Close
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-orange-300 bg-orange-50 text-xs font-bold text-orange-900 hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-200"
+                      onClick={() => {
+                        const tblNum = selectedGroup.tableNumber;
+                        setSelectedTableKey("");
+                        setMobileOrderingTable(tblNum);
+                        setMobileOrderingStatus("occupied");
+                        setMobileOrderingOpen(true);
+                      }}
+                    >
+                      + Add Items
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setSelectedTableKey("")}
+                      iconLeft={<X className="h-4 w-4" />}
+                    >
+                      Close
+                    </Button>
+                  </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <div className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-900">
@@ -4282,6 +4309,23 @@ export default function KitchenPage() {
         token={token}
         onOrderCreated={handleMobileOrderCreated}
         onPrintReceipt={(order, billType) => printReceipt(order, billType)}
+        onOpenTableOrders={(tblNum) => {
+          const targetTable = Number(tblNum || mobileOrderingTable || 0);
+          const group = groupedOrders.find((g) => Number(g.tableNumber) === targetTable);
+          setMobileOrderingOpen(false);
+          if (group) {
+            openTableOrders(group);
+          } else {
+            openTableOrders({
+              tableKey: String(targetTable),
+              tableNumber: targetTable,
+              hasOrders: true,
+            });
+          }
+        }}
+        onUpdateOrderStatus={(orderId, status) => setStatus(orderId, status)}
+        onMarkOrderPaid={(orderId) => setStatus(orderId, "paid")}
+        onRejectOrder={(orderId) => setStatus(orderId, "rejected")}
       />
 
       {/* ── Mobile Printer Setup / Direct Print Modal ── */}

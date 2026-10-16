@@ -12,7 +12,10 @@ import {
   AlertCircle,
   RotateCcw,
   Sparkles,
+  ArrowUpRight,
+  QrCode,
 } from "lucide-react";
+import { getOrderStatusPalette } from "../../lib/orderStatusPalette";
 import { apiFetch } from "../../lib/api";
 import { authHeaders } from "../../lib/auth";
 import { Button } from "../ui/Button";
@@ -32,6 +35,10 @@ export function MobileTableOrderingSheet({
   token = "",
   onOrderCreated,
   onPrintReceipt,
+  onOpenTableOrders,
+  onUpdateOrderStatus,
+  onMarkOrderPaid,
+  onRejectOrder,
 }) {
   const [quantities, setQuantities] = useState({});
   const [customerName, setCustomerName] = useState("");
@@ -66,7 +73,7 @@ export function MobileTableOrderingSheet({
       setIsCustomerSelected(false);
       setErrorMsg("");
       setConfirmedOrder(null);
-      setShowExistingOrders(false);
+      setShowExistingOrders(true);
     }
   }, [isOpen, tableNumber]);
 
@@ -310,10 +317,18 @@ export function MobileTableOrderingSheet({
               {existingOrders.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setShowExistingOrders((prev) => !prev)}
-                  className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-xs font-bold text-orange-800 transition dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-300"
+                  onClick={() => {
+                    if (onOpenTableOrders) {
+                      onOpenTableOrders(tableNumber);
+                    } else {
+                      setShowExistingOrders((prev) => !prev);
+                    }
+                  }}
+                  className="flex items-center gap-1 rounded-full border border-orange-300 bg-orange-100 hover:bg-orange-200 px-2.5 py-1 text-xs font-bold text-orange-900 transition dark:border-orange-800 dark:bg-orange-950 dark:text-orange-200"
+                  title="Click to view & update order status"
                 >
-                  {existingOrders.length} active
+                  <span>{existingOrders.length} active</span>
+                  <ArrowUpRight className="h-3 w-3" />
                 </button>
               )}
               <button
@@ -329,32 +344,167 @@ export function MobileTableOrderingSheet({
 
           {/* Existing orders preview if toggled */}
           {showExistingOrders && existingOrders.length > 0 && (
-            <div className="mt-3 max-h-40 overflow-y-auto rounded-xl border border-orange-200 bg-orange-50/90 p-2.5 text-xs text-slate-800 dark:border-orange-900/60 dark:bg-orange-950/40 dark:text-slate-200">
-              <div className="font-bold text-orange-950 dark:text-orange-200">
-                Active orders for Table {tableNumber}:
-              </div>
-              <div className="mt-1.5 space-y-2">
-                {existingOrders.map((o) => (
-                  <div
-                    key={o._id}
-                    className="flex items-center justify-between rounded-lg bg-white/90 p-2 shadow-2xs dark:bg-slate-900/90"
+            <div className="mt-3 overflow-hidden rounded-2xl border border-orange-200 bg-gradient-to-b from-orange-50/95 to-orange-100/40 p-3 text-xs text-slate-800 dark:border-orange-900/60 dark:from-orange-950/50 dark:to-slate-900 dark:text-slate-200">
+              <div className="flex items-center justify-between pb-2 border-b border-orange-200/80 dark:border-orange-900/40">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-black text-orange-950 dark:text-orange-200">
+                    Active orders for Table {tableNumber}:
+                  </span>
+                  <span className="rounded-full bg-orange-200/80 px-2 py-0.5 text-[10px] font-extrabold text-orange-900 dark:bg-orange-900/60 dark:text-orange-200">
+                    {existingOrders.length}
+                  </span>
+                </div>
+                {onOpenTableOrders && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenTableOrders(tableNumber)}
+                    className="flex items-center gap-1 text-[11px] font-black text-orange-700 hover:text-orange-800 dark:text-orange-300 hover:underline"
                   >
-                    <div>
-                      <span className="font-bold">
-                        #{String(o._id).slice(-6).toUpperCase()}
-                      </span>{" "}
-                      • {o.customerName || "Guest"}
-                      <div className="text-[11px] text-slate-500">
+                    <span>Full View</span>
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              <div className="mt-2.5 space-y-2 max-h-60 overflow-y-auto pr-0.5">
+                {existingOrders.map((o, idx) => {
+                  const palette = getOrderStatusPalette(o.status);
+                  const isManual = o.source === "manual";
+                  const normStatus = String(o?.status || "").toLowerCase().trim();
+
+                  return (
+                    <div
+                      key={o._id}
+                      onClick={() => onOpenTableOrders && onOpenTableOrders(tableNumber)}
+                      className="cursor-pointer rounded-xl border border-orange-200/80 bg-white p-2.5 shadow-xs transition hover:border-orange-400 hover:shadow-sm active:scale-[0.99] dark:border-slate-800 dark:bg-slate-900"
+                    >
+                      {/* Top Row: Customer Info & Status */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wide text-orange-800 dark:text-orange-300">
+                              Customer {idx + 1}
+                            </span>
+                            <span className="font-black text-slate-950 dark:text-slate-100">
+                              #{String(o._id).slice(-6).toUpperCase()}
+                            </span>
+                            {isManual ? (
+                              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-extrabold text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                                Manual
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-extrabold text-sky-900 dark:bg-sky-950 dark:text-sky-200">
+                                <QrCode className="h-2.5 w-2.5" /> QR Order
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-0.5 text-[11px] font-semibold text-slate-600 dark:text-slate-400 truncate">
+                            {o.customerName || "Guest"} {o.phone && o.phone !== "-" ? `• ${o.phone}` : ""}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end shrink-0">
+                          <div
+                            className={`rounded-full border px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider ${palette.pillClassName || ""}`}
+                            style={palette.pillStyle}
+                          >
+                            {palette.normalized || o.status}
+                          </div>
+                          <span className="mt-1 font-black text-slate-950 dark:text-slate-100">
+                            ₹{Number(o.totalAmount || o.subtotalAmount || 0).toFixed(0)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Items summary */}
+                      <div className="mt-1.5 text-[11px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 rounded-md p-1.5">
                         {Array.isArray(o.items)
-                          ? o.items.map((it) => `${it.name} ×${it.qty}`).join(", ")
+                          ? o.items.map((it) => `${it.name} ×${it.qty}`).join(" • ")
                           : ""}
                       </div>
+
+                      {/* Quick Status Update Action Buttons */}
+                      <div
+                        className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-1.5 flex-wrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {normStatus === "pending" && (
+                            <>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => onUpdateOrderStatus && onUpdateOrderStatus(o._id, "accepted")}
+                                className="h-7 px-2.5 text-[11px] font-black bg-orange-600 hover:bg-orange-700 text-white"
+                              >
+                                Accept Order
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => onRejectOrder && onRejectOrder(o._id)}
+                                className="h-7 px-2 text-[11px] font-bold text-red-600 border-red-200 hover:bg-red-50"
+                              >
+                                Reject
+                              </Button>
+                            </>
+                          )}
+                          {normStatus === "accepted" && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => onUpdateOrderStatus && onUpdateOrderStatus(o._id, "preparing")}
+                              className="h-7 px-2.5 text-[11px] font-black bg-amber-600 hover:bg-amber-700 text-white"
+                            >
+                              Start Preparing
+                            </Button>
+                          )}
+                          {normStatus === "preparing" && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => onUpdateOrderStatus && onUpdateOrderStatus(o._id, "ready")}
+                              className="h-7 px-2.5 text-[11px] font-black bg-sky-600 hover:bg-sky-700 text-white"
+                            >
+                              Mark Ready
+                            </Button>
+                          )}
+                          {normStatus === "ready" && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => onUpdateOrderStatus && onUpdateOrderStatus(o._id, "served")}
+                              className="h-7 px-2.5 text-[11px] font-black bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                              Mark Served
+                            </Button>
+                          )}
+                          {normStatus === "served" && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => onMarkOrderPaid && onMarkOrderPaid(o._id)}
+                              className="h-7 px-2.5 text-[11px] font-black bg-emerald-700 hover:bg-emerald-800 text-white"
+                            >
+                              Mark Paid
+                            </Button>
+                          )}
+                        </div>
+
+                        {onOpenTableOrders && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenTableOrders(tableNumber)}
+                            className="text-[10px] font-bold text-slate-500 hover:text-orange-600 dark:text-slate-400 flex items-center gap-0.5 ml-auto"
+                          >
+                            <span>Open in Modal</span>
+                            <ArrowUpRight className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <span className="font-black text-slate-900 dark:text-slate-100">
-                      ₹{Number(o.totalAmount || 0).toFixed(0)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
