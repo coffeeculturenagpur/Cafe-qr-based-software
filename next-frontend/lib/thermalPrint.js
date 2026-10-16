@@ -1,5 +1,7 @@
 // Thermal ESC/POS and Mobile Printing Utilities for QR Dine / Coffee Culture
 
+import { LOGO_ESCPOS_BASE64 } from "./logoEscPos";
+
 const ESC = "\x1b";
 const GS = "\x1d";
 
@@ -19,6 +21,60 @@ export const STORAGE_KEY_BT_NAME = "qrdine_printer_bt_name";
 // In-memory cache for active Bluetooth device connection
 let activeBleDevice = null;
 let activeBleCharacteristic = null;
+
+// Cached Logo ESC/POS bytes
+let cachedLogoBytes = null;
+
+/**
+ * Returns ESC/POS binary bitmap bytes for The Coffee Culture logo.
+ */
+export function getLogoEscPosBytes() {
+  if (cachedLogoBytes) return cachedLogoBytes;
+  if (!LOGO_ESCPOS_BASE64) return new Uint8Array(0);
+
+  try {
+    const binary = typeof window !== "undefined"
+      ? window.atob(LOGO_ESCPOS_BASE64)
+      : Buffer.from(LOGO_ESCPOS_BASE64, "base64").toString("binary");
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    cachedLogoBytes = bytes;
+    return bytes;
+  } catch (err) {
+    console.warn("Could not decode thermal logo bytes:", err);
+    return new Uint8Array(0);
+  }
+}
+
+/**
+ * Helper to concatenate multiple Uint8Arrays.
+ */
+function concatUint8Arrays(arrays) {
+  const totalLength = arrays.reduce((acc, val) => acc + (val?.length || 0), 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const arr of arrays) {
+    if (arr && arr.length > 0) {
+      result.set(arr, offset);
+      offset += arr.length;
+    }
+  }
+  return result;
+}
+
+/**
+ * Format phone string matching original kitchen display.
+ */
+function formatKitchenPhone(phone) {
+  const s = String(phone || "").trim();
+  if (!s) return "—";
+  if (s.startsWith("manual-table-")) return "Walk-in (no phone on file)";
+  if (s.startsWith("manual-walk-in")) return "Walk-in (no phone on file)";
+  return s;
+}
 
 /**
  * Checks if the current client is a mobile or tablet device.
@@ -50,7 +106,6 @@ export function getPrinterPreferences() {
   }
   const isMobile = isMobileDevice();
   const savedMode = localStorage.getItem(STORAGE_KEY_PRINTER_MODE);
-  // Default to ASK on mobile if not yet configured, otherwise BROWSER on desktop
   const mode = savedMode || (isMobile ? PRINTER_MODES.ASK : PRINTER_MODES.BROWSER);
   const paperSize = localStorage.getItem(STORAGE_KEY_PAPER_SIZE) || "80";
   const webhookUrl = localStorage.getItem(STORAGE_KEY_WEBHOOK_URL) || "";
@@ -75,7 +130,7 @@ export function savePrinterPreferences({ mode, paperSize, webhookUrl, bluetoothD
  */
 export function getActiveBluetoothDevice() {
   const isConnected = Boolean(activeBleDevice?.gatt?.connected && activeBleCharacteristic);
-  const name = activeBleDevice?.name || localStorage.getItem(STORAGE_KEY_BT_NAME) || "";
+  const name = activeBleDevice?.name || (typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY_BT_NAME) : "") || "";
   return {
     connected: isConnected,
     name: name,
@@ -163,11 +218,11 @@ function getOrderTotals(order, cafeInfo) {
     : (subtotal * discountValue) / 100;
   const total = hasServerPricing ? Number(order.totalAmount || 0) : Math.max(0, subtotal + tax - discount);
 
-  return { items, subtotal, tax, taxRate, discount, total };
+  return { items, subtotal, tax, taxRate, discount, discountType, discountValue, total };
 }
 
 /**
- * Generate formatted Plaintext receipt.
+ * Generate formatted Plaintext receipt with identical original structure.
  */
 export function buildReceiptText(order, cafeInfo, options = {}) {
   const { billType = "customer", paperSize = "80" } = options;
@@ -182,71 +237,77 @@ export function buildReceiptText(order, cafeInfo, options = {}) {
   const orderIdShort = String(order?._id || "").slice(-6).toUpperCase() || "TEST";
   const tableLabel = Number(order?.tableNumber || 0) > 0 ? `Table ${order.tableNumber}` : "Walk-in";
   const customerName = String(order?.customerName || "Guest");
-  const phone = String(order?.phone || "-");
+  const phone = formatKitchenPhone(order?.phone);
   const cafeName = cafeInfo?.name || "Coffee Culture";
   const orderNote = typeof order?.notes === "string" ? order.notes.trim() : "";
+  const createdAt = order?.createdAt ? new Date(order.createdAt).toLocaleString() : new Date().toLocaleString();
+  const updatedAt = order?.updatedAt ? new Date(order.updatedAt).toLocaleString() : createdAt;
   const timeStr = new Date().toLocaleTimeString();
-  const dateStr = new Date().toLocaleDateString();
+  const payMode = String(order?.paymentMode || "cash").toUpperCase();
+  const orderStatus = String(order?.status || "pending").toUpperCase();
 
-  const { items, subtotal, tax, taxRate, discount, total } = getOrderTotals(order, cafeInfo);
+  const { items, subtotal, tax, taxRate, discount, discountType, discountValue, total } = getOrderTotals(order, cafeInfo);
+  const discountLabel = discountType === "fixed" ? "INR" : `${discountValue.toFixed(2)}%`;
 
-  // Helper to build Customer copy text
+  // Helper to build Customer copy text exactly matching original bill
   const buildCustomerText = () => {
     let t = "";
+    t += pad("[ LOGO: THE COFFEE CULTURE ]", cols, "center") + "\n";
     t += pad(cafeName.toUpperCase(), cols, "center") + "\n";
-    t += pad("By Fusion Bistro", cols, "center") + "\n";
-    t += pad("FINAL BILL (Customer Copy)", cols, "center") + "\n";
+    t += pad("Final Bill", cols, "center") + "\n";
+    t += pad("[ Customer Copy ]", cols, "center") + "\n\n";
+    t += `Order: #${orderIdShort}\n`;
+    t += `Table: ${tableLabel}\n`;
+    t += `Customer: ${customerName}\n`;
+    t += `Phone: ${phone}\n`;
+    t += `Opened: ${createdAt}\n`;
+    t += `Last updated: ${updatedAt}\n`;
+    t += `Bill type: Customer final bill\n`;
     t += divider;
-    t += formatTwoColumns(`Order: #${orderIdShort}`, `Table: ${tableLabel}`, cols);
-    t += formatTwoColumns(`Customer: ${customerName}`, `Time: ${timeStr}`, cols);
-    if (phone && phone !== "-") {
-      t += formatTwoColumns(`Phone: ${phone}`, `Date: ${dateStr}`, cols);
-    }
-    t += divider;
-    t += formatTableRow("ITEM", "QTY", "TOTAL", cols);
+    t += formatTableRow("Item", "Qty", "Total", cols);
     t += divider;
     items.forEach((it) => {
       const lineTotal = (it.price * it.qty).toFixed(2);
-      t += formatTableRow(it.name, `x${it.qty}`, `INR ${lineTotal}`, cols);
+      t += formatTableRow(it.name, String(it.qty), `INR ${lineTotal}`, cols);
     });
     t += divider;
-    t += formatTwoColumns("Subtotal:", `INR ${subtotal.toFixed(2)}`, cols);
-    if (tax > 0) {
-      t += formatTwoColumns(`Tax (${taxRate.toFixed(1)}%):`, `INR ${tax.toFixed(2)}`, cols);
-    }
-    if (discount > 0) {
-      t += formatTwoColumns("Discount:", `-INR ${discount.toFixed(2)}`, cols);
-    }
+    t += formatTwoColumns("Subtotal", `INR ${subtotal.toFixed(2)}`, cols);
+    t += formatTwoColumns(`Tax (${taxRate.toFixed(2)}%)`, `INR ${tax.toFixed(2)}`, cols);
+    t += formatTwoColumns(`Discount (${discountLabel})`, `INR ${discount.toFixed(2)}`, cols);
     t += doubleDivider;
-    t += formatTwoColumns("TOTAL AMOUNT:", `INR ${total.toFixed(2)}`, cols);
+    t += formatTwoColumns("Total", `INR ${total.toFixed(2)}`, cols);
     t += doubleDivider;
     if (orderNote) {
-      t += `NOTE: ${orderNote}\n` + divider;
+      t += `Order note\n${orderNote}\n` + divider;
     }
-    t += pad("Thank you for visiting!", cols, "center") + "\n";
-    t += pad(cafeName, cols, "center") + "\n\n";
+    t += pad(`Payment: ${payMode}`, cols, "center") + "\n";
+    t += pad(`Status: ${orderStatus}`, cols, "center") + "\n";
+    t += pad("Thank you for visiting!", cols, "center") + "\n\n";
     return t;
   };
 
-  // Helper to build KOT text
+  // Helper to build KOT text exactly matching original bill
   const buildKotText = () => {
     let t = "";
-    t += pad("KITCHEN ORDER (KOT)", cols, "center") + "\n";
-    t += pad("*** CHEF COPY ***", cols, "center") + "\n";
+    t += pad("[ LOGO: THE COFFEE CULTURE ]", cols, "center") + "\n";
+    t += pad("Kitchen Order (KOT)", cols, "center") + "\n";
+    t += pad("[ Chef Copy ]", cols, "center") + "\n\n";
+    t += `Order: #${orderIdShort}\n`;
+    t += `Table: ${tableLabel}\n`;
+    t += `Customer: ${customerName}\n`;
+    t += `Phone: ${phone}\n`;
+    t += `Time: ${timeStr}\n`;
     t += divider;
-    t += formatTwoColumns(`Order: #${orderIdShort}`, `Table: ${tableLabel}`, cols);
-    t += formatTwoColumns(`Customer: ${customerName}`, `Time: ${timeStr}`, cols);
-    t += divider;
-    t += formatTableRow("ITEM", "QTY", "", cols);
+    t += formatTwoColumns("Item", "Qty", cols);
     t += divider;
     items.forEach((it) => {
-      t += formatTableRow(it.name, `x ${it.qty}`, "", cols);
+      t += formatTwoColumns(it.name, `x ${it.qty}`, cols);
     });
     t += divider;
     if (orderNote) {
-      t += `ORDER NOTE: ${orderNote}\n` + divider;
+      t += `Order note\n${orderNote}\n` + divider;
     }
-    t += pad("--- Prepare promptly ---", cols, "center") + "\n\n";
+    t += pad("— Prepare promptly —", cols, "center") + "\n\n";
     return t;
   };
 
@@ -265,31 +326,30 @@ export function buildReceiptText(order, cafeInfo, options = {}) {
 }
 
 /**
- * Generate binary ESC/POS byte buffer.
+ * Generate binary ESC/POS byte buffer including the Coffee Culture logo and exact structure.
  */
 export function buildEscPosBuffer(order, cafeInfo, options = {}) {
-  const { billType = "customer", paperSize = "80" } = options;
+  const { billType = "customer", paperSize = "80", includeLogo = true } = options;
   const cols = paperSize === "58" ? 32 : 48;
   const divider = "-".repeat(cols) + "\n";
   const doubleDivider = "=".repeat(cols) + "\n";
 
-  const isChef = billType === "chef";
-  const isCustomer = billType === "customer";
-  const isBoth = billType === "both";
-
   const orderIdShort = String(order?._id || "").slice(-6).toUpperCase() || "TEST";
   const tableLabel = Number(order?.tableNumber || 0) > 0 ? `Table ${order.tableNumber}` : "Walk-in";
   const customerName = String(order?.customerName || "Guest");
-  const phone = String(order?.phone || "-");
+  const phone = formatKitchenPhone(order?.phone);
   const cafeName = cafeInfo?.name || "Coffee Culture";
   const orderNote = typeof order?.notes === "string" ? order.notes.trim() : "";
+  const createdAt = order?.createdAt ? new Date(order.createdAt).toLocaleString() : new Date().toLocaleString();
+  const updatedAt = order?.updatedAt ? new Date(order.updatedAt).toLocaleString() : createdAt;
   const timeStr = new Date().toLocaleTimeString();
-  const dateStr = new Date().toLocaleDateString();
+  const payMode = String(order?.paymentMode || "cash").toUpperCase();
+  const orderStatus = String(order?.status || "pending").toUpperCase();
 
-  const { items, subtotal, tax, taxRate, discount, total } = getOrderTotals(order, cafeInfo);
+  const { items, subtotal, tax, taxRate, discount, discountType, discountValue, total } = getOrderTotals(order, cafeInfo);
+  const discountLabel = discountType === "fixed" ? "INR" : `${discountValue.toFixed(2)}%`;
 
-  // Command sequences
-  const INIT = `${ESC}@`;
+  // ESC/POS Command Sequences
   const ALIGN_CENTER = `${ESC}a\x01`;
   const ALIGN_LEFT = `${ESC}a\x00`;
   const BOLD_ON = `${ESC}E\x01`;
@@ -299,78 +359,112 @@ export function buildEscPosBuffer(order, cafeInfo, options = {}) {
   const TEXT_DOUBLE_SIZE = `${GS}!\x11`;
   const CUT_PAPER = `\n\n\n\n${GS}V\x41\x00`;
 
-  let commands = INIT;
+  const logoBytes = includeLogo ? getLogoEscPosBytes() : new Uint8Array(0);
+  const encoder = new TextEncoder();
 
-  const appendCustomerCopy = () => {
+  // Helper for customer bill ESC/POS string
+  const buildCustomerEscPosText = () => {
     let s = "";
-    s += ALIGN_CENTER + BOLD_ON + TEXT_DOUBLE_SIZE + `${cafeName}\n` + TEXT_NORMAL + BOLD_OFF;
-    s += ALIGN_CENTER + "By Fusion Bistro\n";
-    s += ALIGN_CENTER + BOLD_ON + "[ Final Bill - Customer Copy ]\n" + BOLD_OFF;
-    s += ALIGN_LEFT + divider;
-    s += formatTwoColumns(`Order: #${orderIdShort}`, `Table: ${tableLabel}`, cols);
-    s += formatTwoColumns(`Customer: ${customerName}`, `Time: ${timeStr}`, cols);
-    if (phone && phone !== "-") {
-      s += formatTwoColumns(`Phone: ${phone}`, `Date: ${dateStr}`, cols);
-    }
+    s += ALIGN_CENTER;
+    s += BOLD_ON + TEXT_DOUBLE_SIZE + `${cafeName}\n` + TEXT_NORMAL + BOLD_OFF;
+    s += BOLD_ON + TEXT_DOUBLE_HEIGHT + "Final Bill\n" + TEXT_NORMAL + BOLD_OFF;
+    s += "[ Customer Copy ]\n\n";
+    s += ALIGN_LEFT;
+    s += `Order: #${orderIdShort}\n`;
+    s += `Table: ${tableLabel}\n`;
+    s += `Customer: ${customerName}\n`;
+    s += `Phone: ${phone}\n`;
+    s += `Opened: ${createdAt}\n`;
+    s += `Last updated: ${updatedAt}\n`;
+    s += `Bill type: Customer final bill\n`;
     s += divider;
-    s += BOLD_ON + formatTableRow("ITEM", "QTY", "TOTAL", cols) + BOLD_OFF;
+    s += BOLD_ON + formatTableRow("Item", "Qty", "Total", cols) + BOLD_OFF;
     s += divider;
     items.forEach((it) => {
       const lineTotal = (it.price * it.qty).toFixed(2);
-      s += formatTableRow(it.name, `x${it.qty}`, `INR ${lineTotal}`, cols);
+      s += formatTableRow(it.name, String(it.qty), `INR ${lineTotal}`, cols);
     });
     s += divider;
-    s += formatTwoColumns("Subtotal:", `INR ${subtotal.toFixed(2)}`, cols);
-    if (tax > 0) {
-      s += formatTwoColumns(`Tax (${taxRate.toFixed(1)}%):`, `INR ${tax.toFixed(2)}`, cols);
-    }
-    if (discount > 0) {
-      s += formatTwoColumns("Discount:", `-INR ${discount.toFixed(2)}`, cols);
-    }
+    s += formatTwoColumns("Subtotal", `INR ${subtotal.toFixed(2)}`, cols);
+    s += formatTwoColumns(`Tax (${taxRate.toFixed(2)}%)`, `INR ${tax.toFixed(2)}`, cols);
+    s += formatTwoColumns(`Discount (${discountLabel})`, `INR ${discount.toFixed(2)}`, cols);
     s += doubleDivider;
-    s += BOLD_ON + TEXT_DOUBLE_HEIGHT + formatTwoColumns("TOTAL:", `INR ${total.toFixed(2)}`, cols) + TEXT_NORMAL + BOLD_OFF;
+    s += BOLD_ON + TEXT_DOUBLE_HEIGHT + formatTwoColumns("Total", `INR ${total.toFixed(2)}`, cols) + TEXT_NORMAL + BOLD_OFF;
     s += doubleDivider;
     if (orderNote) {
-      s += BOLD_ON + `NOTE: ${orderNote}\n` + BOLD_OFF + divider;
+      s += BOLD_ON + "Order note\n" + BOLD_OFF;
+      s += `${orderNote}\n`;
+      s += divider;
     }
-    s += ALIGN_CENTER + "Thank you for visiting!\n";
-    s += ALIGN_CENTER + `${cafeName}\n`;
+    s += ALIGN_CENTER;
+    s += `Payment: ${payMode}\n`;
+    s += `Status: ${orderStatus}\n`;
+    s += "Thank you for visiting!\n";
     s += CUT_PAPER;
     return s;
   };
 
-  const appendKotCopy = () => {
+  // Helper for KOT ESC/POS string
+  const buildKotEscPosText = () => {
     let s = "";
-    s += ALIGN_CENTER + BOLD_ON + TEXT_DOUBLE_SIZE + "KITCHEN ORDER\n" + TEXT_NORMAL + BOLD_OFF;
-    s += ALIGN_CENTER + BOLD_ON + "*** KOT - CHEF COPY ***\n" + BOLD_OFF;
-    s += ALIGN_LEFT + divider;
-    s += BOLD_ON + formatTwoColumns(`Order: #${orderIdShort}`, `Table: ${tableLabel}`, cols) + BOLD_OFF;
-    s += formatTwoColumns(`Customer: ${customerName}`, `Time: ${timeStr}`, cols);
+    s += ALIGN_CENTER;
+    s += BOLD_ON + TEXT_DOUBLE_SIZE + "Kitchen Order (KOT)\n" + TEXT_NORMAL + BOLD_OFF;
+    s += "[ Chef Copy ]\n\n";
+    s += ALIGN_LEFT;
+    s += `Order: #${orderIdShort}\n`;
+    s += `Table: ${tableLabel}\n`;
+    s += `Customer: ${customerName}\n`;
+    s += `Phone: ${phone}\n`;
+    s += `Time: ${timeStr}\n`;
     s += divider;
-    s += BOLD_ON + formatTableRow("ITEM", "QTY", "", cols) + BOLD_OFF;
+    s += BOLD_ON + formatTwoColumns("Item", "Qty", cols) + BOLD_OFF;
     s += divider;
     items.forEach((it) => {
-      s += BOLD_ON + TEXT_DOUBLE_HEIGHT + formatTableRow(it.name, `x ${it.qty}`, "", cols) + TEXT_NORMAL + BOLD_OFF;
+      s += BOLD_ON + TEXT_DOUBLE_HEIGHT + formatTwoColumns(it.name, `x ${it.qty}`, cols) + TEXT_NORMAL + BOLD_OFF;
     });
     s += divider;
     if (orderNote) {
-      s += BOLD_ON + `ORDER NOTE: ${orderNote}\n` + BOLD_OFF + divider;
+      s += BOLD_ON + "Order note\n" + BOLD_OFF;
+      s += `${orderNote}\n`;
+      s += divider;
     }
-    s += ALIGN_CENTER + "--- Prepare promptly ---\n";
+    s += ALIGN_CENTER;
+    s += "— Prepare promptly —\n";
     s += CUT_PAPER;
     return s;
   };
 
-  if (isChef) {
-    commands += appendKotCopy();
-  } else if (isCustomer) {
-    commands += appendCustomerCopy();
-  } else if (isBoth) {
-    commands += appendCustomerCopy();
-    commands += appendKotCopy();
+  const initCmd = encoder.encode(`${ESC}@`);
+  const centerCmd = encoder.encode(ALIGN_CENTER);
+  const lfCmd = encoder.encode("\n");
+
+  const parts = [initCmd];
+
+  if (billType === "chef") {
+    if (logoBytes.length > 0) {
+      parts.push(centerCmd, logoBytes, lfCmd);
+    }
+    parts.push(encoder.encode(buildKotEscPosText()));
+  } else if (billType === "customer") {
+    if (logoBytes.length > 0) {
+      parts.push(centerCmd, logoBytes, lfCmd);
+    }
+    parts.push(encoder.encode(buildCustomerEscPosText()));
+  } else if (billType === "both") {
+    // 1. Chef copy (KOT)
+    if (logoBytes.length > 0) {
+      parts.push(centerCmd, logoBytes, lfCmd);
+    }
+    parts.push(encoder.encode(buildKotEscPosText()));
+
+    // 2. Customer copy
+    if (logoBytes.length > 0) {
+      parts.push(centerCmd, logoBytes, lfCmd);
+    }
+    parts.push(encoder.encode(buildCustomerEscPosText()));
   }
 
-  return new TextEncoder().encode(commands);
+  return concatUint8Arrays(parts);
 }
 
 /**
@@ -422,7 +516,6 @@ export async function connectWebBluetoothPrinter() {
 
   let foundCharacteristic = null;
 
-  // Try each known service UUID
   for (const serviceUuid of PRINTER_BLE_SERVICES) {
     try {
       const service = await server.getPrimaryService(serviceUuid);
@@ -434,12 +527,9 @@ export async function connectWebBluetoothPrinter() {
         }
       }
       if (foundCharacteristic) break;
-    } catch {
-      // Continue to next service
-    }
+    } catch {}
   }
 
-  // If not found in known list, inspect all available primary services
   if (!foundCharacteristic) {
     try {
       const services = await server.getPrimaryServices();
@@ -470,7 +560,6 @@ export async function connectWebBluetoothPrinter() {
     savePrinterPreferences({ bluetoothDeviceName: device.name });
   }
 
-  // Handle disconnect
   device.addEventListener("gattserverdisconnected", () => {
     activeBleCharacteristic = null;
   });
@@ -489,7 +578,6 @@ async function sendBleChunks(characteristic, data, chunkSize = 100) {
     } else {
       await characteristic.writeValue(chunk);
     }
-    // Small inter-packet delay for reliable thermal printer buffers
     await new Promise((r) => setTimeout(r, 25));
   }
 }
@@ -528,7 +616,6 @@ export function printViaRawBT(order, cafeInfo, options = {}) {
     encodeURIComponent("https://play.google.com/store/apps/details?id=ru.a402d.rawbtprinter") +
     ";end;";
 
-  // Trigger via anchor element for highest mobile browser compatibility
   const anchor = document.createElement("a");
   anchor.href = intentUrl;
   anchor.rel = "noopener noreferrer";
@@ -631,13 +718,12 @@ export async function printTestReceipt(cafeInfo, options = {}) {
   const testOrder = {
     _id: "TEST" + Math.floor(1000 + Math.random() * 9000),
     tableNumber: "9",
-    customerName: "Test Printer",
+    customerName: "Test Guest",
     phone: "9876543210",
     paymentMode: "CASH",
     items: [
-      { name: "Espresso Single", price: 120, qty: 1 },
-      { name: "Cappuccino Double", price: 180, qty: 2 },
-      { name: "Butter Croissant", price: 150, qty: 1 },
+      { name: "Cold Coffee", price: 150, qty: 1 },
+      { name: "Cappuccino", price: 180, qty: 2 },
     ],
     notes: "Printer test print OK!",
   };
