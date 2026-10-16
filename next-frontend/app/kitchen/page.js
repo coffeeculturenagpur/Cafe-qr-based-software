@@ -39,6 +39,12 @@ import {
 import { TableStatusPad } from "../../components/staff/TableStatusPad";
 import { CigarettePanel } from "../../components/staff/CigarettePanel";
 import { MobileTableOrderingSheet } from "../../components/staff/MobileTableOrderingSheet";
+import { MobilePrintModal } from "../../components/staff/MobilePrintModal";
+import {
+  PRINTER_MODES,
+  getPrinterPreferences,
+  executeThermalPrint,
+} from "../../lib/thermalPrint";
 import {
   ChevronDown,
   ClipboardList,
@@ -271,6 +277,9 @@ export default function KitchenPage() {
   const [mobileOrderingTable, setMobileOrderingTable] = useState(null);
   const [mobileOrderingStatus, setMobileOrderingStatus] = useState("free");
   const [mobileOrderingOpen, setMobileOrderingOpen] = useState(false);
+  const [mobilePrintModalOpen, setMobilePrintModalOpen] = useState(false);
+  const [mobilePrintOrder, setMobilePrintOrder] = useState(null);
+  const [mobilePrintBillType, setMobilePrintBillType] = useState("customer");
   const tableCardRefs = useRef({});
   const pendingAlertOrderIdsRef = useRef(new Set());
   const alertTimeoutRef = useRef(null);
@@ -1079,7 +1088,7 @@ export default function KitchenPage() {
     setCustomerNotes((previous) => previous.filter((entry) => entry.id !== id));
   };
 
-  const printReceipt = (order, billType = "customer") => {
+  const printReceiptBrowser = (order, billType = "customer") => {
     if (!order) return false;
     const isChefBill = billType === "chef";
     const isBoth = billType === "both";
@@ -1536,6 +1545,54 @@ export default function KitchenPage() {
     return true;
   };
 
+  const printReceipt = async (order, billType = "customer") => {
+    if (!order) return false;
+    const prefs = getPrinterPreferences();
+
+    if (prefs.mode === PRINTER_MODES.BROWSER) {
+      return printReceiptBrowser(order, billType);
+    }
+
+    if (prefs.mode === PRINTER_MODES.ASK) {
+      setMobilePrintOrder(order);
+      setMobilePrintBillType(billType);
+      setMobilePrintModalOpen(true);
+      return true;
+    }
+
+    try {
+      const res = await executeThermalPrint(order, cafeInfo, {
+        mode: prefs.mode,
+        paperSize: prefs.paperSize,
+        billType,
+        webhookUrl: prefs.webhookUrl,
+      });
+
+      if (res.status === "browser_fallback") {
+        return printReceiptBrowser(order, billType);
+      }
+      if (res.status === "need_prompt") {
+        setMobilePrintOrder(order);
+        setMobilePrintBillType(billType);
+        setMobilePrintModalOpen(true);
+        return true;
+      }
+
+      showAlert(
+        `Print job sent via ${prefs.mode === PRINTER_MODES.BLUETOOTH ? "Bluetooth" : prefs.mode.toUpperCase()}!`,
+        "info",
+        3500
+      );
+      return true;
+    } catch (err) {
+      console.warn("Thermal print error, opening printer modal:", err);
+      setMobilePrintOrder(order);
+      setMobilePrintBillType(billType);
+      setMobilePrintModalOpen(true);
+      return false;
+    }
+  };
+
   const buildOrderPayloadFromDraft = (draft) => {
     const rawTableNumber = String(draft.tableNumber || "").trim();
     const parsedTableNumber = rawTableNumber ? Number(rawTableNumber) : null;
@@ -1822,9 +1879,24 @@ export default function KitchenPage() {
       subtitle="Take orders, prepare them, serve guests, and complete payment from one dashboard."
       wide
       actions={
-        <>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setMobilePrintOrder(null);
+              setMobilePrintBillType("customer");
+              setMobilePrintModalOpen(true);
+            }}
+            className="h-9 px-3 gap-1.5 text-xs font-bold border-orange-300 dark:border-orange-800 text-orange-800 dark:text-orange-200 hover:bg-orange-50 dark:hover:bg-orange-950/40"
+            title="Printer Settings (Bluetooth / RawBT / Browser)"
+          >
+            <Printer className="h-4 w-4" />
+            <span className="hidden sm:inline">Printer</span>
+          </Button>
           <SoundControl />
-        </>
+        </div>
       }
       contentClassName="w-full max-w-none pb-10"
     >
@@ -4210,6 +4282,21 @@ export default function KitchenPage() {
         token={token}
         onOrderCreated={handleMobileOrderCreated}
         onPrintReceipt={(order, billType) => printReceipt(order, billType)}
+      />
+
+      {/* ── Mobile Printer Setup / Direct Print Modal ── */}
+      <MobilePrintModal
+        isOpen={mobilePrintModalOpen}
+        onClose={() => {
+          setMobilePrintModalOpen(false);
+          setMobilePrintOrder(null);
+        }}
+        pendingOrder={mobilePrintOrder}
+        pendingBillType={mobilePrintBillType}
+        cafeInfo={cafeInfo}
+        onDirectPrintBrowser={(order, billType) => {
+          printReceiptBrowser(order, billType);
+        }}
       />
     </StaffShell>
   );

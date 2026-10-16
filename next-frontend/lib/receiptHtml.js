@@ -1,3 +1,5 @@
+import { getPrinterPreferences, PRINTER_MODES, executeThermalPrint } from "./thermalPrint";
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -174,7 +176,22 @@ export function openPrintWindow(html) {
   return true;
 }
 
-export function printCigaretteBill(order, cafeInfo) {
+export async function printCigaretteBill(order, cafeInfo) {
+  const prefs = getPrinterPreferences();
+  if (prefs.mode !== PRINTER_MODES.BROWSER && prefs.mode !== PRINTER_MODES.ASK) {
+    try {
+      const res = await executeThermalPrint(order, cafeInfo, {
+        billType: "customer",
+        mode: prefs.mode,
+        paperSize: prefs.paperSize,
+        webhookUrl: prefs.webhookUrl,
+      });
+      if (res.status === "success") return true;
+    } catch (e) {
+      console.warn("Thermal print failed, falling back to browser print:", e);
+    }
+  }
+
   const html = buildReceiptHtml(order, cafeInfo, {
     title: "Cigarette Bill",
     tag: "Customer Copy",

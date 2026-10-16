@@ -22,7 +22,13 @@ import { getOrderStatusPalette } from "../../lib/orderStatusPalette";
 import { formatOrderAcceptedAt, formatOrderAcceptToServe, formatOrderServedAt } from "../../lib/orderTiming";
 import { TableStatusPad } from "../../components/staff/TableStatusPad";
 import { CigarettePanel } from "../../components/staff/CigarettePanel";
-import { ChevronDown, X } from "lucide-react";
+import { MobilePrintModal } from "../../components/staff/MobilePrintModal";
+import {
+  PRINTER_MODES,
+  getPrinterPreferences,
+  executeThermalPrint,
+} from "../../lib/thermalPrint";
+import { ChevronDown, X, Printer } from "lucide-react";
 
 function upsertOrder(list, order) {
   const idx = list.findIndex((x) => x._id === order._id);
@@ -80,6 +86,9 @@ export default function WaiterPage() {
   const [selectedTableKey, setSelectedTableKey] = useState("");
   const [blinkingTables, setBlinkingTables] = useState({});
   const [activeTab, setActiveTab] = useState("tables");
+  const [mobilePrintModalOpen, setMobilePrintModalOpen] = useState(false);
+  const [mobilePrintOrder, setMobilePrintOrder] = useState(null);
+  const [mobilePrintBillType, setMobilePrintBillType] = useState("customer");
   const tableCardRefs = useRef({});
 
   const stats = useMemo(() => {
@@ -252,7 +261,7 @@ export default function WaiterPage() {
     }, 120);
   }, []);
 
-  const downloadReceiptPdf = (order) => {
+  const downloadReceiptPdfBrowser = (order) => {
     const itemsRows = order.items
       .map(
         (it) => `
@@ -552,6 +561,48 @@ export default function WaiterPage() {
     receiptWindow.document.close();
   };
 
+  const downloadReceiptPdf = async (order) => {
+    if (!order) return;
+    const prefs = getPrinterPreferences();
+
+    if (prefs.mode === PRINTER_MODES.BROWSER) {
+      downloadReceiptPdfBrowser(order);
+      return;
+    }
+
+    if (prefs.mode === PRINTER_MODES.ASK) {
+      setMobilePrintOrder(order);
+      setMobilePrintBillType("customer");
+      setMobilePrintModalOpen(true);
+      return;
+    }
+
+    try {
+      const res = await executeThermalPrint(order, cafeInfo, {
+        mode: prefs.mode,
+        paperSize: prefs.paperSize,
+        billType: "customer",
+        webhookUrl: prefs.webhookUrl,
+      });
+
+      if (res.status === "browser_fallback") {
+        downloadReceiptPdfBrowser(order);
+        return;
+      }
+      if (res.status === "need_prompt") {
+        setMobilePrintOrder(order);
+        setMobilePrintBillType("customer");
+        setMobilePrintModalOpen(true);
+        return;
+      }
+    } catch (err) {
+      console.warn("Thermal print error, opening modal:", err);
+      setMobilePrintOrder(order);
+      setMobilePrintBillType("customer");
+      setMobilePrintModalOpen(true);
+    }
+  };
+
   const motionInitial = mounted && !reducedMotion ? { opacity: 0, y: 10 } : false;
 
   if (!authReady) {
@@ -577,9 +628,24 @@ export default function WaiterPage() {
       title="Waiter dashboard"
       subtitle="Track ready orders and update service status."
       actions={
-        <>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setMobilePrintOrder(null);
+              setMobilePrintBillType("customer");
+              setMobilePrintModalOpen(true);
+            }}
+            className="h-9 px-3 gap-1.5 text-xs font-bold border-orange-300 dark:border-orange-800 text-orange-800 dark:text-orange-200 hover:bg-orange-50 dark:hover:bg-orange-950/40"
+            title="Printer Settings (Bluetooth / RawBT / Browser)"
+          >
+            <Printer className="h-4 w-4" />
+            <span className="hidden sm:inline">Printer</span>
+          </Button>
           <SoundControl />
-        </>
+        </div>
       }
       contentClassName="mx-auto w-full max-w-6xl"
     >
@@ -1136,6 +1202,21 @@ export default function WaiterPage() {
           </>
         )}
       </div>
+
+      {/* ── Mobile Printer Setup / Direct Print Modal ── */}
+      <MobilePrintModal
+        isOpen={mobilePrintModalOpen}
+        onClose={() => {
+          setMobilePrintModalOpen(false);
+          setMobilePrintOrder(null);
+        }}
+        pendingOrder={mobilePrintOrder}
+        pendingBillType={mobilePrintBillType}
+        cafeInfo={cafeInfo}
+        onDirectPrintBrowser={(order) => {
+          downloadReceiptPdfBrowser(order);
+        }}
+      />
     </StaffShell>
   );
 }
