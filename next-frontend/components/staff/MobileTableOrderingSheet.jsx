@@ -46,7 +46,7 @@ export function MobileTableOrderingSheet({
   const [notes, setNotes] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
-  const [collapsedCategories, setCollapsedCategories] = useState({});
+  const [expandedCategory, setExpandedCategory] = useState(null);
   const [customerSuggestions, setCustomerSuggestions] = useState([]);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
@@ -67,7 +67,7 @@ export function MobileTableOrderingSheet({
       setNotes("");
       setSelectedCategory("All");
       setSearchQuery("");
-      setCollapsedCategories({});
+      setExpandedCategory(null);
       setCustomerSuggestions([]);
       setShowCustomerSuggestions(false);
       setIsCustomerSelected(false);
@@ -166,6 +166,20 @@ export function MobileTableOrderingSheet({
     return result;
   }, [categoryList, categoryMap, selectedCategory, searchQuery]);
 
+  // Default to the first category being expanded if none is currently selected
+  useEffect(() => {
+    if (displayedCategories.length > 0 && !expandedCategory && !searchQuery.trim()) {
+      setExpandedCategory(displayedCategories[0].name);
+    }
+  }, [displayedCategories, expandedCategory, searchQuery]);
+
+  // When filtering via the category dropdown, automatically open that category
+  useEffect(() => {
+    if (selectedCategory && selectedCategory !== "All") {
+      setExpandedCategory(selectedCategory);
+    }
+  }, [selectedCategory]);
+
   // Add / remove quantity handlers
   const handleAdd = (itemId) => {
     if (confirmedOrder) setConfirmedOrder(null);
@@ -189,10 +203,7 @@ export function MobileTableOrderingSheet({
   };
 
   const handleToggleCategory = (catName) => {
-    setCollapsedCategories((prev) => ({
-      ...prev,
-      [catName]: !prev[catName],
-    }));
+    setExpandedCategory((prev) => (prev === catName ? null : catName));
   };
 
   // Calculations
@@ -564,7 +575,7 @@ export function MobileTableOrderingSheet({
           ) : (
             <div className="space-y-4">
               {displayedCategories.map((cat) => {
-                const isCollapsed = Boolean(collapsedCategories[cat.name]);
+                const isExpanded = searchQuery.trim() ? true : expandedCategory === cat.name;
                 // Count items ordered in this category
                 const orderedInCat = cat.items.reduce(
                   (sum, item) => sum + (quantities[item._id] || 0),
@@ -574,38 +585,58 @@ export function MobileTableOrderingSheet({
                 return (
                   <section
                     key={cat.name}
-                    className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/70 shadow-2xs dark:border-slate-800/80 dark:bg-slate-900/60"
+                    className="overflow-hidden rounded-2xl border border-orange-200/80 bg-white shadow-2xs dark:border-slate-800/80 dark:bg-slate-900/60"
                   >
                     {/* Category Dropdown Accordion Header */}
                     <button
                       type="button"
                       onClick={() => handleToggleCategory(cat.name)}
-                      className="flex w-full items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 py-2.5 text-left transition hover:bg-slate-100/70 dark:border-slate-800 dark:bg-slate-900/90"
+                      className={`flex w-full items-center justify-between px-4 py-3 text-left transition active:scale-[0.99] ${
+                        isExpanded
+                          ? "border-b border-orange-600 bg-gradient-to-r from-orange-600 via-orange-500 to-amber-600 text-white shadow-xs dark:from-orange-700 dark:via-orange-600 dark:to-amber-700"
+                          : "border-b border-orange-200/70 bg-gradient-to-r from-amber-50/90 via-orange-50/60 to-amber-50/90 hover:from-amber-100/90 hover:to-orange-100/90 text-orange-950 dark:border-slate-800 dark:bg-slate-900/90"
+                      }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={`text-xs font-black uppercase tracking-wider truncate ${
+                            isExpanded ? "text-white" : "text-orange-950 dark:text-orange-200"
+                          }`}
+                        >
                           {cat.name}
                         </span>
-                        <span className="text-[11px] font-semibold text-slate-400">
-                          ({cat.items.length})
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                            isExpanded
+                              ? "bg-white/25 text-white"
+                              : "bg-orange-100/80 text-orange-900 dark:bg-orange-950/60 dark:text-orange-300"
+                          }`}
+                        >
+                          {cat.items.length}
                         </span>
                         {orderedInCat > 0 && (
-                          <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-black text-orange-800 dark:bg-orange-950/60 dark:text-orange-300">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-black shadow-xs ${
+                              isExpanded
+                                ? "bg-white text-orange-950"
+                                : "bg-orange-600 text-white"
+                            }`}
+                          >
                             {orderedInCat} added
                           </span>
                         )}
                       </div>
-                      <span className="text-slate-500">
-                        {isCollapsed ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
+                      <span className={`shrink-0 ml-2 ${isExpanded ? "text-white" : "text-orange-700 dark:text-orange-400"}`}>
+                        {isExpanded ? (
                           <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
                         )}
                       </span>
                     </button>
 
                     {/* Food Items in this Category */}
-                    {!isCollapsed && (
+                    {isExpanded && (
                       <div className="divide-y divide-slate-100 p-2 dark:divide-slate-800/60">
                         {cat.items.map((item) => {
                           const currentQty = quantities[item._id] || 0;
@@ -628,19 +659,8 @@ export function MobileTableOrderingSheet({
                                 </div>
                               </div>
 
-                              {/* Right: Quantity controls as per Screenshot 3 */}
+                              {/* Right: Quantity controls with -1 on left and +1 on right for thumb accessibility */}
                               <div className="inline-flex shrink-0 items-center rounded-xl bg-slate-200/80 p-1 dark:bg-slate-800">
-                                <button
-                                  type="button"
-                                  onClick={() => handleAdd(item._id)}
-                                  className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-800 transition hover:bg-slate-300 active:scale-95 dark:text-slate-200"
-                                  aria-label={`Add 1 ${item.name}`}
-                                >
-                                  +1
-                                </button>
-                                <div className="flex h-8 min-w-[32px] items-center justify-center rounded-lg bg-white px-2 text-center text-sm font-black text-slate-900 shadow-2xs dark:bg-slate-950 dark:text-slate-100">
-                                  {currentQty}
-                                </div>
                                 <button
                                   type="button"
                                   onClick={() => handleRemove(item._id)}
@@ -653,6 +673,17 @@ export function MobileTableOrderingSheet({
                                   aria-label={`Remove 1 ${item.name}`}
                                 >
                                   -1
+                                </button>
+                                <div className="flex h-8 min-w-[32px] items-center justify-center rounded-lg bg-white px-2 text-center text-sm font-black text-slate-900 shadow-2xs dark:bg-slate-950 dark:text-slate-100">
+                                  {currentQty}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdd(item._id)}
+                                  className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-orange-600 hover:bg-orange-100 active:scale-95 dark:text-orange-400 dark:hover:bg-orange-950"
+                                  aria-label={`Add 1 ${item.name}`}
+                                >
+                                  +1
                                 </button>
                               </div>
                             </div>
